@@ -9,6 +9,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Turborepo
+.turbo/
+
 # 環境変数（dotenvx 暗号化前の生ファイルは追跡しない）
 .env
 .env.*
