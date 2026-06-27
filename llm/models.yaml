@@ -995,25 +995,27 @@ cypher_contract:
         example: "MATCH (t:Track {name:\"Drums\"}) RETURN t"
 
 error_models:
+    type_namespace: "urn:live-connector:error"
+    type_policy: "RFC 9457 の type は外部 docs URL ではなく、安定した不透明 URI として扱う。"
     classes:
         - name: "AppError"
           status_source: "constructor args"
           type_source: "constructor args or about:blank"
         - name: "ConfigError"
           status: 500
-          type: "https://live-connector.philtz.dev/errors/config"
+          type: "urn:live-connector:error:config"
         - name: "AuthError"
           status: 401
-          type: "https://live-connector.philtz.dev/errors/unauthorized"
+          type: "urn:live-connector:error:unauthorized"
         - name: "BadRequestError"
           status: 400
-          type: "https://live-connector.philtz.dev/errors/bad-request"
+          type: "urn:live-connector:error:bad-request"
         - name: "NotFoundError"
           status: 404
-          type: "https://live-connector.philtz.dev/errors/not-found"
+          type: "urn:live-connector:error:not-found"
         - name: "MethodNotAllowedError"
           status: 405
-          type: "https://live-connector.philtz.dev/errors/method-not-allowed"
+          type: "urn:live-connector:error:method-not-allowed"
     normalization:
         function: "toProblemDetails"
         app_error: "AppError.toProblemDetails(instance)"
