@@ -1,7 +1,7 @@
 {
     "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
     "files": {
-        "includes": ["**", "!**/dist", "!ableton-sdk"]
+        "includes": ["**", "!**/dist", "!**/.turbo", "!ableton-sdk"]
     },
     "formatter": {
         "enabled": true,

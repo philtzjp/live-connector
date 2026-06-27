@@ -1,7 +1,8 @@
 /**
  * Extension Host は extension を `vm` コンテキストで評価する。そのコンテキストには
  * Web 標準グローバル（Request/Response/Headers/ReadableStream/URL 等）が存在しないため、
- * Hono などが読み込み時の `class … extends Response` で失敗する。
+ * SDK の StreamableHTTPServerTransport が内部利用する Node HTTP 変換層などが
+ * 読み込み時の `class … extends Response` で失敗する。
  *
  * このファイルは esbuild の `inject` で他モジュールより先に実行され、Node 組み込みから
  * 不足しているグローバルを補う。

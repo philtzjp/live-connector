@@ -4,12 +4,12 @@
 
 ## システム概要
 
-live-connector は Ableton Extensions SDK 上で動作する Node.js extension である。Extension Host 内で Hono ベースの HTTP サーバーを起動し、`@hono/mcp` の Streamable HTTP transport 経由で MCP ツールを提供する。MCP ツールは Live Object Model (LOM) をプロパティグラフとして扱い、Cypher サブセットで読み取り、型付きツールで書き込みを行う。
+live-connector は Ableton Extensions SDK 上で動作する Node.js extension である。Extension Host 内で Node.js 標準 `http` サーバーを起動し、`@modelcontextprotocol/sdk` 同梱の `StreamableHTTPServerTransport` 経由で MCP ツールを提供する。MCP ツールは Live Object Model (LOM) をプロパティグラフとして扱い、Cypher サブセットで読み取り、型付きツールで書き込みを行う。
 
 ```mermaid
 flowchart LR
     agent["AI agent / MCP client"]
-    http["Hono HTTP server<br/>apps/extension/src/server/http.ts"]
+    http["Node http server<br/>apps/extension/src/server/http.ts"]
     mcp["MCP server<br/>apps/extension/src/server/mcp.ts"]
     tools["MCP tools<br/>schema / get_overview / query / set_* / write_notes"]
     cypher["@live-connector/cypher<br/>parser / evaluator / selector"]
@@ -22,7 +22,7 @@ flowchart LR
     log["@live-connector/log<br/>scoped logger"]
 
     agent -->|"POST /api/v1/mcp"| http
-    http --> mcp
+    http -->|"StreamableHTTPServerTransport"| mcp
     mcp --> tools
     tools --> cypher
     tools --> schema
@@ -83,7 +83,7 @@ sequenceDiagram
     participant host as Ableton Extension Host
     participant extension as activate()
     participant env as packages/env
-    participant http as Hono server
+    participant http as Node http server
     participant mcp as MCP server
     participant live as Ableton Live
 
@@ -103,7 +103,7 @@ sequenceDiagram
 | method | path | 認証 | 用途 |
 | --- | --- | --- | --- |
 | `GET` | `/health` | なし | `application/health+json` のヘルスチェック |
-| `ALL` | `/api/v1/mcp` | `LIVE_CONNECTOR_MCP_TOKEN` 設定時のみ Bearer | Streamable HTTP MCP endpoint |
+| `POST` | `/api/v1/mcp` | `LIVE_CONNECTOR_MCP_TOKEN` 設定時のみ Bearer | Streamable HTTP MCP endpoint |
 
 ## MCP ツール
 
