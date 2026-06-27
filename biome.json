@@ -1,0 +1,24 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+    "files": {
+        "includes": ["**", "!**/dist", "!ableton-sdk"]
+    },
+    "formatter": {
+        "enabled": true,
+        "indentStyle": "space",
+        "indentWidth": 4,
+        "lineWidth": 100
+    },
+    "javascript": {
+        "formatter": {
+            "quoteStyle": "double",
+            "semicolons": "asNeeded"
+        }
+    },
+    "linter": {
+        "enabled": true,
+        "rules": {
+            "preset": "recommended"
+        }
+    }
+}
