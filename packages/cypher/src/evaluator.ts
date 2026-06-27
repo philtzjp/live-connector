@@ -27,6 +27,8 @@ export interface GraphAdapter<N> {
     getProperty(node: N, property: string): Promise<ScalarValue>
     /** ノードを `_label` 付きのプロパティマップに直列化する（配列プロパティを含みうる）。 */
     serialize(node: N): Promise<Record<string, unknown>>
+    /** ノードの同一性判定に使う安定した識別子（重複排除用）。 */
+    identity(node: N): unknown
 }
 
 type Binding<N> = {
@@ -156,8 +158,8 @@ async function evalWhere<N>(
     return compareScalar(actual, expr.operator, expr.right)
 }
 
-/** AST を GraphAdapter 越しに評価し、結果行を返す。 */
-export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promise<Row[]> {
+/** パターンマッチ・WHERE・LIMIT を適用して束縛集合を返す（read/select 共通）。 */
+async function matchBindings<N>(query: Query, adapter: GraphAdapter<N>): Promise<Binding<N>[]> {
     const start = query.pattern.start
     let bindings: Binding<N>[] = []
 
@@ -200,7 +202,41 @@ export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promi
     if (query.limit !== null) {
         bindings = bindings.slice(0, query.limit)
     }
+    return bindings
+}
 
+/**
+ * 書き込み対象の選択用に、単一変数を RETURN するクエリの束縛ノード集合を返す。
+ * identity による重複排除を行う。
+ */
+export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Promise<N[]> {
+    const returns = query.returns
+    const target = returns[0]
+    if (returns.length !== 1 || target === undefined || target.kind !== "variable") {
+        throw new BadRequestError(
+            "Selection query must RETURN exactly one node variable, e.g. RETURN t",
+        )
+    }
+    const bindings = await matchBindings(query, adapter)
+    const seen = new Set<unknown>()
+    const nodes: N[] = []
+    for (const binding of bindings) {
+        const node = binding.vars.get(target.variable)
+        if (node === undefined) {
+            throw new BadRequestError(`Unknown variable "${target.variable}" in RETURN`)
+        }
+        const id = adapter.identity(node)
+        if (!seen.has(id)) {
+            seen.add(id)
+            nodes.push(node)
+        }
+    }
+    return nodes
+}
+
+/** AST を GraphAdapter 越しに評価し、結果行を返す。 */
+export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promise<Row[]> {
+    const bindings = await matchBindings(query, adapter)
     const rows: Row[] = []
     for (const binding of bindings) {
         const row: Row = {}
