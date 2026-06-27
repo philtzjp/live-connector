@@ -50,10 +50,14 @@ export const query_contract: QueryContract = {
     select: {
         tools: [
             "create_clip",
+            "create_arrangement_clip",
+            "delete_arrangement_clip",
+            "delete_cue_point",
             "render_audio",
             "set_track",
             "set_clip",
             "set_scene",
+            "set_cue_point",
             "set_device_parameter",
             "write_notes",
         ],
@@ -62,8 +66,10 @@ export const query_contract: QueryContract = {
         valid_examples: [
             'MATCH (t:AudioTrack {name:"Print"}) RETURN t',
             'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',
+            'MATCH (t:Track {name:"Print"})-[:HAS_ARRANGEMENT_CLIP]->(c:Clip {index:0}) RETURN c',
             'MATCH (t:Track {name:"Drums"}) RETURN t',
             'MATCH (c:MidiClip {name:"Bass"}) RETURN c',
+            'MATCH (c:CuePoint {name:"Verse"}) RETURN c',
             'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
         ],
         invalid_examples: [
@@ -221,6 +227,7 @@ export const LOM_SCHEMA: LomSchema = {
             label: "CuePoint",
             properties: [
                 { name: "index", type: "number", access: "r" },
+                { name: "name", type: "string", access: "rw" },
                 { name: "time", type: "number", access: "r" },
             ],
         },
@@ -258,6 +265,8 @@ export const EXAMPLE_QUERIES: string[] = [
     "MATCH (t:Track) RETURN t.index, t.name, t.kind, t.mute, t.arm",
     'MATCH (:Track {name:"Drums"})-[:HAS_DEVICE]->(:Device {name:"Operator"})-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p.value, p.min, p.max',
     'MATCH (t:AudioTrack {name:"Print"}) RETURN t',
+    'MATCH (t:Track {name:"Print"})-[:HAS_ARRANGEMENT_CLIP]->(c:Clip) RETURN c.index, c.name, c.startTime, c.duration',
+    "MATCH (c:CuePoint) RETURN c.index, c.name, c.time",
     'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',
     "MATCH (t:MidiTrack {mute:true})-[:HAS_CLIPSLOT]->(:ClipSlot)-[:HAS_CLIP]->(c:Clip) RETURN t.name, c.index, c.name",
     "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n",
