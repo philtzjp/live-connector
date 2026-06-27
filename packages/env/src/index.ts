@@ -14,7 +14,8 @@ const DEFAULT_PORT = 7799
 const env_schema = z.object({
     LIVE_CONNECTOR_MCP_HOST: z.string().min(1).default(DEFAULT_HOST),
     LIVE_CONNECTOR_MCP_PORT: z.coerce.number().int().positive().max(65535).default(DEFAULT_PORT),
-    LIVE_CONNECTOR_MCP_TOKEN: z.string().min(1, "LIVE_CONNECTOR_MCP_TOKEN is required"),
+    // 任意。設定されている場合のみ Bearer 認証を有効化する（未設定 = ローカル限定で認証なし）。
+    LIVE_CONNECTOR_MCP_TOKEN: z.string().min(1).optional(),
 })
 
 export type Env = z.infer<typeof env_schema>
