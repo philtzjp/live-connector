@@ -38,6 +38,9 @@ type Binding<N> = {
 
 const select_return_hint =
     'Selection query must RETURN exactly one bound node variable. For write-tool select, use e.g. MATCH (t:Track {name:"Drums"}) RETURN t. Do not return properties such as RETURN t.name or multiple variables such as RETURN t, c; those forms are only for the read-only query tool.'
+const select_return_metadata = {
+    hint: "For write-tool select, RETURN one bound node variable only. Use the read-only query tool for property projections or multiple RETURN items.",
+}
 
 function valuesEqual(left: ScalarValue, right: ScalarValue): boolean {
     return left === right
@@ -155,7 +158,9 @@ async function evalWhere<N>(
     }
     const node = binding.vars.get(expr.left.variable)
     if (node === undefined) {
-        throw new BadRequestError(`Unknown variable "${expr.left.variable}" in WHERE`)
+        throw new BadRequestError(`Unknown variable "${expr.left.variable}" in WHERE`, {
+            hint: "Use a variable that is bound in the MATCH pattern before referencing it in WHERE.",
+        })
     }
     const actual = await adapter.getProperty(node, expr.left.property)
     return compareScalar(actual, expr.operator, expr.right)
@@ -216,7 +221,7 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
     const returns = query.returns
     const target = returns[0]
     if (returns.length !== 1 || target === undefined || target.kind !== "variable") {
-        throw new BadRequestError(select_return_hint)
+        throw new BadRequestError(select_return_hint, select_return_metadata)
     }
     const bindings = await matchBindings(query, adapter)
     const seen = new Set<unknown>()
@@ -226,6 +231,7 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
         if (node === undefined) {
             throw new BadRequestError(
                 `Unknown variable "${target.variable}" in RETURN. Return one variable bound in MATCH, e.g. MATCH (t:Track) RETURN t`,
+                { hint: "Use a variable that is bound in the MATCH pattern." },
             )
         }
         const id = adapter.identity(node)
@@ -252,7 +258,9 @@ export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promi
             }
             const node = binding.vars.get(item.variable)
             if (node === undefined) {
-                throw new BadRequestError(`Unknown variable "${item.variable}" in RETURN`)
+                throw new BadRequestError(`Unknown variable "${item.variable}" in RETURN`, {
+                    hint: "Use a variable that is bound in the MATCH pattern.",
+                })
             }
             if (item.kind === "variable") {
                 row[item.variable] = await adapter.serialize(node)
