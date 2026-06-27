@@ -26,41 +26,45 @@ RETURN p.value, p.min, p.max
 
 ### 前提
 
-- Node.js（Extension Host は同梱ランタイム ≥ 24.14.1 を使用）+ pnpm
-- Ableton Live（Extensions 対応の Beta ビルド）+ Preferences → Extensions → **Developer Mode** 有効化
-- Ableton Extensions SDK 配布物（`ableton-create-extension` / `ableton-extensions-sdk` / `ableton-extensions-cli`）を `ableton-sdk/` に配置
-
-### 起動
-
-1. 依存をインストール: `pnpm install`
-2. `apps/extension/.env`（`.gitignore` 済み）を作成:
-   ```
-   EXTENSION_HOST_PATH=/Applications/Ableton Live 12 Beta.app   # 各自の Live のパス
-   LIVE_CONNECTOR_MCP_HOST=127.0.0.1
-   LIVE_CONNECTOR_MCP_PORT=7799
-   ```
-3. Live を起動し、Developer Mode を ON にする
-4. 拡張をビルド＆起動: `pnpm --filter @live-connector/extension start`
-   - 成功すると Max Window に `MCP HTTP server listening ... :7799` が出る
-5. MCP クライアントから `http://127.0.0.1:7799/api/v1/mcp` に接続する
-   - ヘルスチェック: `http://127.0.0.1:7799/health`
-   - `/api/v1/mcp` は loopback Host / Origin header のみを許可する
+- インストール済み `.ablx` を使う場合: Ableton Live（Extensions 対応の Beta ビルド）
+- リポジトリから `.ablx` を生成または開発起動する場合: Node.js（Extension Host は同梱ランタイム ≥ 24.14.1 を使用）+ pnpm
+- リポジトリから `.ablx` を生成または開発起動する場合: Ableton Extensions SDK 配布物（`ableton-create-extension` / `ableton-extensions-sdk` / `ableton-extensions-cli`）を `ableton-sdk/` に配置
 
 ### 配布用 `.ablx` の生成
 
-配布用アーカイブは SDK CLI の `extensions-cli package` で生成します。リポジトリルートで次を実行すると、production build の後に `apps/extension/dist/live-connector-1.0.0.ablx` が生成されます。
+配布用アーカイブは SDK CLI の `extensions-cli package` で生成します。リポジトリルートで依存をインストールし、package task を実行すると、production build の後に `apps/extension/dist/live-connector-2.0.0.ablx` が生成されます。
 
 ```sh
+pnpm install
 pnpm package
 ```
 
 出力ファイル名は `apps/extension/manifest.json` の `name` と `version` から決まります。`.ablx` には `manifest.json` と `manifest.entry` が指す `dist/extension.js` が含まれます。
 
-エンドユーザーが配布物を読み込む場合は、Ableton Live の Preferences → Extensions で Developer Mode を有効にし、生成された `.ablx` を Extensions ページへドロップします。
+### インストール型運用（CLI 不要）
+
+1. 生成済みまたは配布済みの `live-connector-2.0.0.ablx` を用意する。
+2. Ableton Live の Preferences → Extensions を開き、`.ablx` を Extensions ページへドロップしてインストールする。
+3. Preferences → Extensions の **Developer Mode** を OFF にする。
+4. Ableton Live を再起動する。
+5. Live 起動時に Extension Host がインストール済み拡張を自動ロードし、Max Window に `MCP HTTP server listening ... :7799` が出る。
+6. MCP クライアントから `http://127.0.0.1:7799/api/v1/mcp` に接続する。
+   - ヘルスチェック: `http://127.0.0.1:7799/health`
+   - `/api/v1/mcp` は loopback Host / Origin header のみを許可する
+
+インストール型運用では `extensions-cli run` や `pnpm --filter @live-connector/extension start` による CLI 起動は不要です。`LIVE_CONNECTOR_MCP_HOST` と `LIVE_CONNECTOR_MCP_PORT` は未設定時に `127.0.0.1:7799` を使用します。
 
 ### Claude Code への登録
 
-プロジェクトルートに `.mcp.json`（`.gitignore` 済み）を置くと Claude Code から利用できます:
+Claude Code へは初回に 1 回だけ project scope で HTTP MCP server を登録します。#35 以降は Authorization header は不要です。
+
+```sh
+claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp --scope project
+```
+
+登録または URL 変更などの MCP 設定変更後は Claude Code を再起動します。Live 再起動や拡張再インストールだけで URL が変わらない場合、Claude Code は同じ endpoint へ自動再接続します。
+
+`.mcp.json`（`.gitignore` 済み）で管理する場合は、プロジェクトルートに次の設定を置きます。
 
 ```json
 {
@@ -72,6 +76,32 @@ pnpm package
   }
 }
 ```
+
+### 更新
+
+1. リポジトリルートで `pnpm package` を実行し、新しい `apps/extension/dist/live-connector-2.0.0.ablx` を生成する。
+2. Ableton Live の Preferences → Extensions で新しい `.ablx` をドロップし、既存の live-connector を更新する。
+3. Ableton Live を再起動する。
+4. URL が `http://127.0.0.1:7799/api/v1/mcp` のままであれば、Claude Code 側の再登録と再起動は不要です。MCP 設定を変更した場合のみ Claude Code を再起動します。
+
+### 開発モード（高速リロード）
+
+Developer Mode は、Live が管理する Extension Host を停止し、開発者が `extensions-cli run` で Extension Host を起動するためのモードです。変更を短いサイクルで確認する開発時に使用します。
+
+1. `apps/extension/.env`（`.gitignore` 済み）を作成する。
+   ```
+   EXTENSION_HOST_PATH=/Applications/Ableton Live 12 Beta.app   # 各自の Live のパス
+   LIVE_CONNECTOR_MCP_HOST=127.0.0.1
+   LIVE_CONNECTOR_MCP_PORT=7799
+   ```
+2. Live を起動し、Preferences → Extensions の **Developer Mode** を ON にする。
+3. 拡張をビルド＆起動する。
+   ```sh
+   pnpm --filter @live-connector/extension start
+   ```
+4. 成功すると Max Window に `MCP HTTP server listening ... :7799` が出る。
+
+開発モードの変更反映は CLI 起動で行います。インストール型運用では再パッケージ、`.ablx` 再インストール、Live 再起動で変更を反映します。
 
 ## プリセット探索とデバイス状態
 

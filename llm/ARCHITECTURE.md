@@ -78,15 +78,18 @@ flowchart TB
 
 ## 起動フロー
 
+インストール型運用では Developer Mode を OFF にし、Live が管理する Extension Host がインストール済み `.ablx` を Live 起動時に自動ロードする。開発モードでは Developer Mode を ON にし、Live が管理する host を停止したうえで `extensions-cli run`（`pnpm --filter @live-connector/extension start` 経由）を使って開発者が Extension Host を起動する。
+
 ```mermaid
 sequenceDiagram
+    participant live as Ableton Live
     participant host as Ableton Extension Host
     participant extension as activate()
     participant env as packages/env
     participant http as Node http server
     participant mcp as MCP server
-    participant live as Ableton Live
 
+    live->>host: auto-load installed .ablx on startup
     host->>extension: activate(ActivationContext)
     extension->>live: initialize(activation, API_VERSION)
     extension->>env: loadEnv(process.env)
@@ -98,6 +101,15 @@ sequenceDiagram
 
 `activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。`loadEnv()` は loopback host と port を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
 
+## 運用モード
+
+| モード | Developer Mode | 起動主体 | 用途 | 変更反映 |
+| --- | --- | --- | --- | --- |
+| インストール型 | OFF | Ableton Live / Extension Host | 通常利用。CLI 起動不要 | `.ablx` 再インストール + Live 再起動 |
+| 開発モード | ON | `extensions-cli run` | build 後の高速リロード | `pnpm --filter @live-connector/extension start` |
+
+Claude Code は project scope の HTTP MCP server として `claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp --scope project` で登録する。登録または URL 変更などの MCP 設定変更後は Claude Code 再起動が必要である。Live 再起動や `.ablx` 再インストールのみで URL が変わらない場合、Claude Code は同じ endpoint に再接続する。
+
 ## 配布フロー
 
 ```mermaid
@@ -108,6 +120,8 @@ sequenceDiagram
     participant build as apps/extension build:production
     participant cli as extensions-cli package
     participant dist as dist/live-connector-<version>.ablx
+    participant live as Ableton Live Preferences
+    participant host as Extension Host
 
     user->>pnpm: pnpm package
     pnpm->>turbo: turbo run package
@@ -115,9 +129,11 @@ sequenceDiagram
     build-->>turbo: dist/extension.js
     turbo->>cli: extensions-cli package . -o dist/live-connector-<version>.ablx
     cli-->>dist: manifest.json + dist/extension.js
+    user->>live: drop .ablx into Extensions page
+    live->>host: auto-load on next Live startup when Developer Mode is OFF
 ```
 
-`pnpm package` は root script から Turborepo の `package` task を実行する。`@live-connector/extension` の package script は production bundle を生成した後、`manifest.json` の `name` と `version` から `.ablx` の出力名を決め、SDK CLI の `extensions-cli package` に渡す。`.ablx` は `apps/extension/dist/` に生成される。
+`pnpm package` は root script から Turborepo の `package` task を実行する。`@live-connector/extension` の package script は production bundle を生成した後、`manifest.json` の `name` と `version` から `.ablx` の出力名を決め、SDK CLI の `extensions-cli package` に渡す。`.ablx` は `apps/extension/dist/` に生成される。インストール型運用では、生成済み `.ablx` を Ableton Live の Preferences → Extensions にドロップし、Developer Mode OFF の状態で Live を再起動する。
 
 ## HTTP エンドポイント
 

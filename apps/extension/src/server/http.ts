@@ -17,7 +17,7 @@ import { createMcpServer } from "./mcp"
 
 const MCP_PATH = "/api/v1/mcp"
 const HEALTH_PATH = "/health"
-const SERVICE_VERSION = "0.0.0"
+const SERVICE_VERSION = "2.0.0"
 const MAX_BODY_BYTES = 1024 * 1024
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"])
 
