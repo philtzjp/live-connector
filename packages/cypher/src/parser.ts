@@ -1,0 +1,319 @@
+import { BadRequestError } from "@live-connector/error"
+import type {
+    ComparisonOperator,
+    NodePattern,
+    PatternPart,
+    Query,
+    RelationshipPattern,
+    ReturnItem,
+    ScalarValue,
+    WhereExpr,
+} from "./ast"
+import { type Token, tokenize } from "./tokenizer"
+
+/** 可変長リレーション `*` で上限省略時に適用するホップ数の上限。 */
+const DEFAULT_MAX_HOPS = 8
+
+class Parser {
+    private readonly tokens: Token[]
+    private pos = 0
+
+    constructor(tokens: Token[]) {
+        this.tokens = tokens
+    }
+
+    parse(): Query {
+        this.expectKeyword("MATCH")
+        const pattern = this.parsePattern()
+
+        let where: WhereExpr | null = null
+        if (this.peekKeyword("WHERE")) {
+            this.next()
+            where = this.parseOr()
+        }
+
+        this.expectKeyword("RETURN")
+        const returns = this.parseReturnItems()
+
+        let limit: number | null = null
+        if (this.peekKeyword("LIMIT")) {
+            this.next()
+            limit = this.expectIntegerLiteral()
+        }
+
+        if (this.pos < this.tokens.length) {
+            throw this.error(`Unexpected token after RETURN clause`)
+        }
+        return { pattern, where, returns, limit }
+    }
+
+    private parsePattern(): PatternPart {
+        const start = this.parseNodePattern()
+        const chain: PatternPart["chain"] = []
+        while (this.peekPunct("-")) {
+            const relationship = this.parseRelationship()
+            const node = this.parseNodePattern()
+            chain.push({ relationship, node })
+        }
+        return { start, chain }
+    }
+
+    private parseNodePattern(): NodePattern {
+        this.expectPunct("(")
+        let variable: string | null = null
+        let label: string | null = null
+
+        if (this.peekType("identifier")) {
+            variable = this.next().value
+        }
+        if (this.peekPunct(":")) {
+            this.next()
+            label = this.expectType("identifier").value
+        }
+        const properties = this.peekPunct("{") ? this.parseProperties() : {}
+        this.expectPunct(")")
+        return { variable, label, properties }
+    }
+
+    private parseProperties(): Record<string, ScalarValue> {
+        this.expectPunct("{")
+        const properties: Record<string, ScalarValue> = {}
+        if (!this.peekPunct("}")) {
+            do {
+                const key = this.expectType("identifier").value
+                this.expectPunct(":")
+                properties[key] = this.parseScalar()
+            } while (this.consumePunct(","))
+        }
+        this.expectPunct("}")
+        return properties
+    }
+
+    private parseRelationship(): RelationshipPattern {
+        this.expectPunct("-")
+        this.expectPunct("[")
+        this.expectPunct(":")
+        const types = [this.expectType("identifier").value]
+        while (this.consumePunct("|")) {
+            types.push(this.expectType("identifier").value)
+        }
+
+        let minHops = 1
+        let maxHops = 1
+        if (this.consumePunct("*")) {
+            minHops = 1
+            maxHops = DEFAULT_MAX_HOPS
+            const hasMin = this.peekType("number")
+            if (hasMin) {
+                minHops = this.expectIntegerLiteral()
+                maxHops = minHops
+            }
+            if (this.consumePunct("..")) {
+                maxHops = this.peekType("number") ? this.expectIntegerLiteral() : DEFAULT_MAX_HOPS
+                if (!hasMin) {
+                    minHops = 1
+                }
+            }
+            if (maxHops < minHops) {
+                throw this.error(
+                    `Variable-length range max (${maxHops}) is less than min (${minHops})`,
+                )
+            }
+        }
+
+        this.expectPunct("]")
+        this.expectPunct("->")
+        return { types, minHops, maxHops }
+    }
+
+    private parseReturnItems(): ReturnItem[] {
+        const items: ReturnItem[] = []
+        do {
+            if (this.consumePunct("*")) {
+                items.push({ kind: "all" })
+                continue
+            }
+            const variable = this.expectType("identifier").value
+            if (this.consumePunct(".")) {
+                const property = this.expectType("identifier").value
+                items.push({ kind: "property", variable, property })
+            } else {
+                items.push({ kind: "variable", variable })
+            }
+        } while (this.consumePunct(","))
+        return items
+    }
+
+    private parseOr(): WhereExpr {
+        let left = this.parseAnd()
+        while (this.peekKeyword("OR")) {
+            this.next()
+            const right = this.parseAnd()
+            left = { kind: "logical", operator: "OR", left, right }
+        }
+        return left
+    }
+
+    private parseAnd(): WhereExpr {
+        let left = this.parseNot()
+        while (this.peekKeyword("AND")) {
+            this.next()
+            const right = this.parseNot()
+            left = { kind: "logical", operator: "AND", left, right }
+        }
+        return left
+    }
+
+    private parseNot(): WhereExpr {
+        if (this.peekKeyword("NOT")) {
+            this.next()
+            return { kind: "not", expr: this.parseNot() }
+        }
+        return this.parsePrimary()
+    }
+
+    private parsePrimary(): WhereExpr {
+        if (this.consumePunct("(")) {
+            const expr = this.parseOr()
+            this.expectPunct(")")
+            return expr
+        }
+        return this.parseComparison()
+    }
+
+    private parseComparison(): WhereExpr {
+        const variable = this.expectType("identifier").value
+        this.expectPunct(".")
+        const property = this.expectType("identifier").value
+        const { operator, isList } = this.parseOperator()
+        const right = isList ? this.parseList() : this.parseScalar()
+        return { kind: "comparison", left: { variable, property }, operator, right }
+    }
+
+    private parseOperator(): { operator: ComparisonOperator; isList: boolean } {
+        if (this.peekKeyword("CONTAINS")) {
+            this.next()
+            return { operator: "CONTAINS", isList: false }
+        }
+        if (this.peekKeyword("STARTS")) {
+            this.next()
+            this.expectKeyword("WITH")
+            return { operator: "STARTS_WITH", isList: false }
+        }
+        if (this.peekKeyword("IN")) {
+            this.next()
+            return { operator: "IN", isList: true }
+        }
+        const token = this.next()
+        if (token.type !== "punct" || !["=", "<>", "<", ">", "<=", ">="].includes(token.value)) {
+            throw this.error(`Expected a comparison operator but found "${token.value}"`)
+        }
+        return { operator: token.value as ComparisonOperator, isList: false }
+    }
+
+    private parseList(): ScalarValue[] {
+        this.expectPunct("[")
+        const values: ScalarValue[] = []
+        if (!this.peekPunct("]")) {
+            do {
+                values.push(this.parseScalar())
+            } while (this.consumePunct(","))
+        }
+        this.expectPunct("]")
+        return values
+    }
+
+    private parseScalar(): ScalarValue {
+        const token = this.next()
+        if (token.type === "string") {
+            return token.value
+        }
+        if (token.type === "number") {
+            return Number(token.value)
+        }
+        if (token.type === "boolean") {
+            return token.value === "true"
+        }
+        if (token.type === "null") {
+            return null
+        }
+        throw this.error(`Expected a scalar value but found "${token.value}"`)
+    }
+
+    private expectIntegerLiteral(): number {
+        const token = this.expectType("number")
+        const value = Number(token.value)
+        if (!Number.isInteger(value)) {
+            throw this.error(`Expected an integer but found "${token.value}"`)
+        }
+        return value
+    }
+
+    private peek(): Token | undefined {
+        return this.tokens[this.pos]
+    }
+
+    private next(): Token {
+        const token = this.tokens[this.pos]
+        if (token === undefined) {
+            throw new BadRequestError("Unexpected end of query")
+        }
+        this.pos++
+        return token
+    }
+
+    private peekType(type: Token["type"]): boolean {
+        return this.peek()?.type === type
+    }
+
+    private peekPunct(value: string): boolean {
+        const token = this.peek()
+        return token?.type === "punct" && token.value === value
+    }
+
+    private peekKeyword(value: string): boolean {
+        const token = this.peek()
+        return token?.type === "keyword" && token.value === value
+    }
+
+    private consumePunct(value: string): boolean {
+        if (this.peekPunct(value)) {
+            this.pos++
+            return true
+        }
+        return false
+    }
+
+    private expectPunct(value: string): Token {
+        if (!this.peekPunct(value)) {
+            throw this.error(`Expected "${value}"`)
+        }
+        return this.next()
+    }
+
+    private expectKeyword(value: string): Token {
+        if (!this.peekKeyword(value)) {
+            throw this.error(`Expected keyword "${value}"`)
+        }
+        return this.next()
+    }
+
+    private expectType(type: Token["type"]): Token {
+        if (!this.peekType(type)) {
+            throw this.error(`Expected ${type}`)
+        }
+        return this.next()
+    }
+
+    private error(message: string): BadRequestError {
+        const token = this.peek()
+        const where =
+            token === undefined ? "end of query" : `"${token.value}" (position ${token.start})`
+        return new BadRequestError(`Cypher parse error: ${message}, but found ${where}`)
+    }
+}
+
+/** Cypher サブセット文字列を AST にパースする。 */
+export function parseQuery(input: string): Query {
+    return new Parser(tokenize(input)).parse()
+}

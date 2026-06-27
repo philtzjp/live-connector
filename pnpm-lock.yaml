@@ -35,6 +35,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.6
         version: 2.0.6(hono@4.12.27)
+      '@live-connector/cypher':
+        specifier: workspace:*
+        version: link:../../packages/cypher
       '@live-connector/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -66,6 +69,12 @@ importers:
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
+
+  packages/cypher:
+    dependencies:
+      '@live-connector/error':
+        specifier: workspace:*
+        version: link:../error
 
   packages/env:
     dependencies:
