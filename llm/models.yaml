@@ -872,6 +872,107 @@ mcp_tools:
                       endTime: "number"
                       duration: "number"
 
+    - name: "move_clip"
+      source: "apps/extension/src/tools/arrangement.ts"
+      note: "SDK に移動 API が無いため、状態退避→削除→再作成→再適用で実現する（失敗時は元位置へ復元）。"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "アレンジメント Clip を単一ノード変数で RETURN する Cypher。Session Clip は不可。"
+          startTime:
+              type: "number"
+              required: true
+              constraints: ["value >= 0"]
+          overwrite:
+              type: "boolean"
+              required: false
+              note: "移動先が他クリップと重なる場合に true で範囲を空ける。"
+          confirm:
+              type: "boolean"
+              required: false
+              note: "再現不能属性の喪失または他クリップ消去を伴う場合に必須。"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"confirm_required\" | \"noop\" | \"ok\""
+                  movedTo:
+                      optional: true
+                      shape:
+                          startTime: "number"
+                          endTime: "number"
+                  droppedAttributes: "string[]"
+                  clearedClips: "number"
+                  clip:
+                      _label: "\"MidiClip\" | \"AudioClip\" | \"Clip\""
+                      index: "number | null"
+                      name: "string"
+                      startTime: "number"
+                      endTime: "number"
+                      duration: "number"
+
+    - name: "trim_clip"
+      source: "apps/extension/src/tools/arrangement.ts"
+      note: "SDK にトリム API が無いため、状態退避→削除→再作成→再適用で実現する（失敗時は元状態へ復元）。startTime は維持する。MIDI は marker を設定できないため、ノートを新窓へフィルタ／シフトして近似する。"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "アレンジメント Clip を単一ノード変数で RETURN する Cypher。Session Clip は不可。"
+          duration:
+              type: "number"
+              required: false
+              constraints: ["positive"]
+              note: "トリム後の長さ（拍）。duration / startMarker / endMarker のいずれか 1 つ以上が必須。"
+          startMarker:
+              type: "number"
+              required: false
+              constraints: ["value >= 0"]
+              note: "Audio の内容窓開始（拍）。MIDI ではノートの窓開始として解釈する。"
+          endMarker:
+              type: "number"
+              required: false
+              constraints: ["positive"]
+              note: "Audio の内容窓終了（拍）。MIDI ではノートの窓終了として解釈する。"
+          overwrite:
+              type: "boolean"
+              required: false
+              note: "新しい範囲が他クリップと重なる場合に true で範囲を空ける。"
+          confirm:
+              type: "boolean"
+              required: false
+              note: "再現不能属性の喪失・窓外ノート削除・他クリップ消去を伴う場合に必須。"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"confirm_required\" | \"noop\" | \"ok\""
+                  trimmedTo:
+                      optional: true
+                      shape:
+                          startTime: "number"
+                          endTime: "number"
+                          duration: "number"
+                          startMarker: "number | undefined"
+                          endMarker: "number | undefined"
+                  droppedNotes: "number"
+                  droppedAttributes: "string[]"
+                  clearedClips: "number"
+                  clip:
+                      _label: "\"MidiClip\" | \"AudioClip\" | \"Clip\""
+                      index: "number | null"
+                      name: "string"
+                      startTime: "number"
+                      endTime: "number"
+                      duration: "number"
+
     - name: "create_cue_point"
       source: "apps/extension/src/tools/arrangement.ts"
       input:
