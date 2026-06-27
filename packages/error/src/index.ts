@@ -85,9 +85,9 @@ export class ConfigError extends AppError {
     }
 }
 
-/** 認証失敗（Bearer トークン欠落・不一致）。 */
+/** 認証・認可失敗。 */
 export class AuthError extends AppError {
-    constructor(detail = "Missing or invalid bearer token") {
+    constructor(detail = "Missing or invalid credentials") {
         super({
             type: `${ERROR_TYPE_BASE_URI}:unauthorized`,
             title: "Unauthorized",
