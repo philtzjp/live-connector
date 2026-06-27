@@ -5,7 +5,7 @@
  * HTTP 表現は RFC 9457 (Problem Details for HTTP APIs) に準拠する。
  */
 
-const ERROR_BASE_URI = "https://live-connector.philtz.dev/errors"
+const ERROR_TYPE_BASE_URI = "urn:live-connector:error"
 
 export type ProblemDetails = {
     type: string
@@ -58,7 +58,7 @@ export class AppError extends Error {
 export class ConfigError extends AppError {
     constructor(detail: string) {
         super({
-            type: `${ERROR_BASE_URI}/config`,
+            type: `${ERROR_TYPE_BASE_URI}:config`,
             title: "Configuration Error",
             status: 500,
             detail,
@@ -70,7 +70,7 @@ export class ConfigError extends AppError {
 export class AuthError extends AppError {
     constructor(detail = "Missing or invalid bearer token") {
         super({
-            type: `${ERROR_BASE_URI}/unauthorized`,
+            type: `${ERROR_TYPE_BASE_URI}:unauthorized`,
             title: "Unauthorized",
             status: 401,
             detail,
@@ -81,14 +81,19 @@ export class AuthError extends AppError {
 /** クライアント入力の不正。 */
 export class BadRequestError extends AppError {
     constructor(detail: string) {
-        super({ type: `${ERROR_BASE_URI}/bad-request`, title: "Bad Request", status: 400, detail })
+        super({
+            type: `${ERROR_TYPE_BASE_URI}:bad-request`,
+            title: "Bad Request",
+            status: 400,
+            detail,
+        })
     }
 }
 
 /** 対象オブジェクトが見つからない（ロケータ・クエリ解決失敗など）。 */
 export class NotFoundError extends AppError {
     constructor(detail: string) {
-        super({ type: `${ERROR_BASE_URI}/not-found`, title: "Not Found", status: 404, detail })
+        super({ type: `${ERROR_TYPE_BASE_URI}:not-found`, title: "Not Found", status: 404, detail })
     }
 }
 
@@ -96,7 +101,7 @@ export class NotFoundError extends AppError {
 export class MethodNotAllowedError extends AppError {
     constructor(detail: string) {
         super({
-            type: `${ERROR_BASE_URI}/method-not-allowed`,
+            type: `${ERROR_TYPE_BASE_URI}:method-not-allowed`,
             title: "Method Not Allowed",
             status: 405,
             detail,
