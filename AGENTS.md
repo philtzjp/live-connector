@@ -39,7 +39,7 @@
 | `skill-escalation` | 既存スキルに従っても進まない時、Web 検索等でより新しい情報が得られた時、スキルの条件分岐厳守が最良結果を妨げると判断した時。ローカル改変と上流への提案 Issue 起票手順 |
 | `skill-selection` | 上流からスキルを導入・除外する判断時。プロジェクトの技術スタック・運用ルールに照らし必要なスキルのみを残し、スキル表と実体を一致させる時 |
 | `typescript-monorepo` | 新規パッケージ追加、`turbo.json` / `pnpm-workspace.yaml` / `tsconfig` 編集、`apps/` `packages/` 構成変更、責務パッケージ（`log` / `error` / `env`）の配置・参照時 |
-| `api-design` | API エンドポイント・MCP サーバーの設計/実装/変更時（Hono ハンドラ、`@hono/mcp`、OpenAPI スキーマ、ルーティング、認証方式の追加など） |
+| `api-design` | API エンドポイント・MCP サーバーの設計/実装/変更時（HTTP ハンドラ、OpenAPI スキーマ、ルーティング、MCP トランスポート、認証方式の追加など） |
 | `commit-and-git` | コミット、プッシュ、ブランチ作成/切替/削除、マージ、リベース、`gh pr merge` などあらゆる Git / GitHub 操作時 |
 | `issue-branch-pr-flow` | パッチバグフィクス以外の実装作業時。Issue 起票 → 専用ブランチ → 実装 → PR → 同期確認 → マージの標準フロー |
 | `issue-model-signature` | GitHub Issue 本体・コメント、PR 本文・コメントを書く/更新する時。先頭に `✳︎ <会社名> <モデル名> <バージョン>` 署名行を入れる |
