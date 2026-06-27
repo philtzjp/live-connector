@@ -158,6 +158,19 @@ models:
             required: true
             value: "live-connector MCP server"
 
+    - name: "HttpEndpoint"
+      kind: "http_contract"
+      source: "apps/extension/src/server/http.ts"
+      entries:
+          - method: "GET"
+            path: "/health"
+            auth: "none"
+            response: "HealthResponse"
+          - method: "POST"
+            path: "/api/v1/mcp"
+            auth: "Bearer when LIVE_CONNECTOR_MCP_TOKEN is set"
+            transport: "StreamableHTTPServerTransport"
+
     - name: "TextContent"
       kind: "mcp_content"
       source: "apps/extension/src/tools/write.ts"
@@ -998,6 +1011,9 @@ error_models:
         - name: "NotFoundError"
           status: 404
           type: "https://live-connector.philtz.dev/errors/not-found"
+        - name: "MethodNotAllowedError"
+          status: 405
+          type: "https://live-connector.philtz.dev/errors/method-not-allowed"
     normalization:
         function: "toProblemDetails"
         app_error: "AppError.toProblemDetails(instance)"

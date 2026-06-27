@@ -92,6 +92,18 @@ export class NotFoundError extends AppError {
     }
 }
 
+/** 許可されていない HTTP メソッド。 */
+export class MethodNotAllowedError extends AppError {
+    constructor(detail: string) {
+        super({
+            type: `${ERROR_BASE_URI}/method-not-allowed`,
+            title: "Method Not Allowed",
+            status: 405,
+            detail,
+        })
+    }
+}
+
 /** 任意のエラー値を Problem Details に正規化する。AppError 以外は 500 に丸める。 */
 export function toProblemDetails(error: unknown, instance?: string): ProblemDetails {
     if (error instanceof AppError) {

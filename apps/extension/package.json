@@ -12,8 +12,6 @@
     },
     "dependencies": {
         "@ableton-extensions/sdk": "file:../../ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz",
-        "@hono/mcp": "^0.3.0",
-        "@hono/node-server": "^2.0.6",
         "@live-connector/cypher": "workspace:*",
         "@live-connector/env": "workspace:*",
         "@live-connector/error": "workspace:*",
@@ -24,7 +22,6 @@
         "abort-controller": "^3.0.0",
         "domexception": "^4.0.0",
         "event-target-shim": "^6.0.2",
-        "hono": "^4.12.27",
         "undici": "^8.5.0",
         "zod": "^4.4.3"
     },

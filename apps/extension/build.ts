@@ -6,6 +6,7 @@ const production = process.argv.includes("--production")
 
 // Node 組み込みから取れる Web グローバルは、どのモジュール初期化よりも先に必要なため
 // バンドル先頭（banner）で require 経由で補う（inject では順序が間に合わない場合がある）。
+// SDK の StreamableHTTPServerTransport は内部の Node HTTP 変換層で Request/Response などを参照する。
 const globalsBanner = `(function(){
   var g = globalThis;
   function set(n, v){ if (g[n] === undefined && v !== undefined) g[n] = v; }
