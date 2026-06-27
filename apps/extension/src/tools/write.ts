@@ -1,5 +1,5 @@
 import { parseQuery, type ScalarValue, selectNodes } from "@live-connector/cypher"
-import { BadRequestError, toProblemDetails } from "@live-connector/error"
+import { BadRequestError, NotFoundError, toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
@@ -47,12 +47,17 @@ async function runSetTool(
             if (!adapter.matchesLabel(node, requiredLabel)) {
                 throw new BadRequestError(
                     `select must return ${requiredLabel} nodes, but matched ${adapter.labelOf(node)}`,
+                    {
+                        hint: `Change the select query so it returns ${requiredLabel} nodes only.`,
+                    },
                 )
             }
         }
 
         if (nodes.length === 0) {
-            return textResult({ status: "no_match", matched: 0 })
+            throw new NotFoundError("select matched 0 nodes", {
+                hint: "Adjust the select query or run query/schema to inspect available labels, properties and relationships.",
+            })
         }
         if (params.preview === true) {
             const targets = await Promise.all(nodes.map((node) => adapter.serialize(node)))
@@ -88,7 +93,7 @@ async function runSetTool(
         })
     } catch (error) {
         deps.log.error("set tool failed", { error: String(error) })
-        return textResult(toProblemDetails(error), true)
+        return textResult(toMcpError(error), true)
     }
 }
 

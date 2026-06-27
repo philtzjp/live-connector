@@ -1,6 +1,6 @@
 import { MidiClip, type NoteDescription } from "@ableton-extensions/sdk"
 import { parseQuery, selectNodes } from "@live-connector/cypher"
-import { BadRequestError, toProblemDetails } from "@live-connector/error"
+import { BadRequestError, toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
@@ -69,6 +69,9 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
                 if (nodes.length !== 1) {
                     throw new BadRequestError(
                         `write_notes requires the selection to match exactly one MidiClip, but matched ${nodes.length}`,
+                        {
+                            hint: 'Change select so it returns exactly one MidiClip node, e.g. MATCH (c:MidiClip {name:"Bass"}) RETURN c.',
+                        },
                     )
                 }
                 const node = nodes[0]
@@ -77,7 +80,9 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
                     node.type !== "object" ||
                     !(node.value instanceof MidiClip)
                 ) {
-                    throw new BadRequestError("select must return a MidiClip")
+                    throw new BadRequestError("select must return a MidiClip", {
+                        hint: "Use a select query that returns a MidiClip node.",
+                    })
                 }
                 const clip = node.value
                 const descriptions = notes.map(toNoteDescription)
@@ -116,7 +121,7 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
             } catch (error) {
                 deps.log.error("write_notes failed", { error: String(error) })
                 return {
-                    content: [{ type: "text", text: JSON.stringify(toProblemDetails(error)) }],
+                    content: [{ type: "text", text: JSON.stringify(toMcpError(error), null, 2) }],
                     isError: true,
                 }
             }

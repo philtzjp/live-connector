@@ -215,6 +215,48 @@ models:
             type: "string"
             required: false
 
+    - name: "McpErrorMetadata"
+      kind: "mcp_error_metadata"
+      source: "packages/error/src/index.ts"
+      owner_package: "@live-connector/error"
+      fields:
+          - name: "hint"
+            type: "string"
+            required: false
+          - name: "validProperties"
+            type: "string[]"
+            required: false
+          - name: "validRelationships"
+            type: "string[]"
+            required: false
+          - name: "validStartLabels"
+            type: "string[]"
+            required: false
+
+    - name: "McpError"
+      kind: "mcp_error_response"
+      source: "packages/error/src/index.ts"
+      owner_package: "@live-connector/error"
+      fields:
+          - name: "error"
+            type: "string"
+            required: true
+          - name: "detail"
+            type: "string"
+            required: true
+          - name: "hint"
+            type: "string"
+            required: false
+          - name: "validProperties"
+            type: "string[]"
+            required: false
+          - name: "validRelationships"
+            type: "string[]"
+            required: false
+          - name: "validStartLabels"
+            type: "string[]"
+            required: false
+
     - name: "AppErrorArgs"
       kind: "error_input"
       source: "packages/error/src/index.ts"
@@ -230,6 +272,9 @@ models:
             required: true
           - name: "detail"
             type: "string"
+            required: false
+          - name: "metadata"
+            type: "McpErrorMetadata"
             required: false
 
     - name: "Logger"
@@ -1040,6 +1085,9 @@ cypher_contract:
 error_models:
     type_namespace: "urn:live-connector:error"
     type_policy: "RFC 9457 の type は外部 docs URL ではなく、安定した不透明 URI として扱う。"
+    response_policy:
+        http: "HTTP サーバー層は RFC 9457 ProblemDetails を返す。"
+        mcp: "MCP ツール失敗時は McpError を返し、HTTP の status/type/instance は含めない。"
     classes:
         - name: "AppError"
           status_source: "constructor args"
@@ -1060,12 +1108,22 @@ error_models:
           status: 405
           type: "urn:live-connector:error:method-not-allowed"
     normalization:
-        function: "toProblemDetails"
-        app_error: "AppError.toProblemDetails(instance)"
-        unknown_error:
-            type: "about:blank"
-            title: "Internal Server Error"
-            status: 500
+        http:
+            function: "toProblemDetails"
+            app_error: "AppError.toProblemDetails(instance)"
+            unknown_error:
+                type: "about:blank"
+                title: "Internal Server Error"
+                status: 500
+        mcp:
+            function: "toMcpError"
+            app_error:
+                error: "ConfigError=config / AuthError=unauthorized / BadRequestError=bad_request / NotFoundError=not_found / MethodNotAllowedError=method_not_allowed"
+                detail: "AppError.detail or AppError.title"
+                metadata: "hint / validProperties / validRelationships / validStartLabels when present"
+            unknown_error:
+                error: "internal_error"
+                detail: "Error.message or String(error)"
 
 examples:
     cypher:

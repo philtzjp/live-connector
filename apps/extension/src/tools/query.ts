@@ -1,5 +1,5 @@
 import { evaluate, parseQuery } from "@live-connector/cypher"
-import { toProblemDetails } from "@live-connector/error"
+import { toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
@@ -36,7 +36,7 @@ export function registerQueryTool(server: McpServer, deps: ServerDeps): void {
             } catch (error) {
                 deps.log.error("query failed", { error: String(error) })
                 return {
-                    content: [{ type: "text", text: JSON.stringify(toProblemDetails(error)) }],
+                    content: [{ type: "text", text: JSON.stringify(toMcpError(error), null, 2) }],
                     isError: true,
                 }
             }
