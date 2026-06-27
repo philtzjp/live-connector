@@ -1,0 +1,89 @@
+pre-commit:
+  commands:
+    dotenv-encrypted-check:
+      glob: "**/.env*"
+      run: |
+        export LANG=ja_JP.UTF-8
+        export LC_ALL=ja_JP.UTF-8
+
+        EXPECTED='#/-------------------[DOTENV_PUBLIC_KEY]--------------------/'
+        FAILED=0
+        for file in {staged_files}; do
+          if [ ! -f "$file" ]; then
+            continue
+          fi
+          FIRST_LINE=$(head -n 1 "$file")
+          case "$FIRST_LINE" in
+            "$EXPECTED"*) ;;
+            *)
+              echo "$file の1行目が暗号化ヘッダで始まっていません。暗号化されていない環境変数が混入している可能性があります。dotenvx encrypt で暗号化してください"
+              FAILED=1
+              ;;
+          esac
+        done
+
+        exit $FAILED
+
+commit-msg:
+  commands:
+    semantic-commit-lint:
+      run: |
+        export LANG=ja_JP.UTF-8
+        export LC_ALL=ja_JP.UTF-8
+
+        COMMIT_MSG_FILE="{1}"
+        COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+        if echo "$COMMIT_MSG" | grep -qE '^(Merge|fixup!|squash!)'; then
+          exit 0
+        fi
+
+        VALID_PREFIXES="feat|fix|perf|refactor|docs|style|test|chore|ci|build"
+
+        if ! echo "$COMMIT_MSG" | grep -qE "^($VALID_PREFIXES)(\(.+\))?: .+"; then
+          echo "コミットメッセージの形式が不正です: type(scope?): description [$COMMIT_MSG]"
+          exit 1
+        fi
+
+        if echo "$COMMIT_MSG" | grep -qiE 'Co-Authored-By:'; then
+          echo "Co-Authored-By はコミットメッセージに含められません [$COMMIT_MSG]"
+          exit 1
+        fi
+
+        COMMIT_BODY=$(echo "$COMMIT_MSG" | sed -E "s/^($VALID_PREFIXES)(\([^)]+\))?: //")
+        if echo "$COMMIT_BODY" | grep -qE '[()（）\[\]]'; then
+          echo "本文にかっこ類は使用できません（スコープ表記 type(scope): は許可） [$COMMIT_MSG]"
+          exit 1
+        fi
+
+        if echo "$COMMIT_MSG" | grep -qiE 'フェーズ|[Pp]hase'; then
+          echo "「フェーズ」「Phase」は使用できません。具体的な変更内容を記述してください [$COMMIT_MSG]"
+          exit 1
+        fi
+
+        MSG_LINES=$(echo "$COMMIT_MSG" | sed '/^$/d' | wc -l | tr -d ' ')
+        if [ "$MSG_LINES" -gt 1 ]; then
+          echo "コミットメッセージは1行にしてください [$COMMIT_MSG]"
+          exit 1
+        fi
+
+        if command -v claude &> /dev/null; then
+          RESULT=$(claude -p "You are a strict commit message linter. Respond with ONLY 'PASS' or 'FAIL: reason in Japanese'.
+
+        Rules:
+        - Format: type(scope?): description
+        - Description MUST clearly describe a specific code change (what was changed and/or why)
+        - FAIL if the description is meaningless, nonsensical, placeholder-like, or does not describe an actual code change
+        - FAIL examples: 'fix: a', 'feat: test', 'fix: update', 'chore: changes', 'feat: asdf', 'fix: hoge', 'refactor: stuff'
+        - PASS examples: 'fix: null pointer in login flow', 'feat: add user settings page', 'refactor: extract auth middleware'
+
+        Message: $COMMIT_MSG" 2>/dev/null)
+
+          if ! echo "$RESULT" | grep -q "^PASS"; then
+            REASON=$(echo "$RESULT" | sed 's/^FAIL: //' | tr '\n' ' ' | sed 's/  */ /g; s/ *$//')
+            echo "却下 [$COMMIT_MSG] $REASON"
+            exit 1
+          fi
+        fi
+
+        exit 0

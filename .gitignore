@@ -1,0 +1,19 @@
+# Ableton 提供の Extensions SDK 一式（再配布対象外・上流提供物）
+/ableton-sdk/
+
+# 設計ドキュメント（ローカル限定・非公開）
+/MCP-DESIGN.md
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 環境変数（dotenvx 暗号化前の生ファイルは追跡しない）
+.env
+.env.*
+!.env.keys.example
+
+# OS / エディタ
+.DS_Store
+*.log
