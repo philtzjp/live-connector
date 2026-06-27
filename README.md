@@ -75,6 +75,12 @@ pnpm package
 
 トークンを有効にした場合は `"headers": { "Authorization": "Bearer <token>" }` を追加します。
 
+## プリセット探索とデバイス状態
+
+Ableton Extensions SDK v1.0.0-beta.0 には Browser API、`BrowserItem`、`.adv` / `.adg` / third-party plug-in ネイティブプリセットを読み込む API はありません。`search_presets` は指定 root 配下のプリセット候補ファイルを列挙するだけで、Live や plug-in へ適用しません。
+
+挿入済み Device の host 公開パラメータは、`save_device_state` で `environment.storageDirectory/device-states/` 配下に JSON 保存し、`apply_device_state` で同名パラメータへ再適用できます。対象は `DeviceParameter` として SDK に露出する値に限定され、Serum など third-party plug-in の非公開内部状態や波形選択は保存・復元されません。
+
 ## ディレクトリ構成
 
 ```text
