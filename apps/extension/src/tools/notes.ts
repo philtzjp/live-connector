@@ -19,6 +19,10 @@ const noteSchema = z.object({
 
 type NoteInput = z.infer<typeof noteSchema>
 
+function selectDescription(): string {
+    return 'MidiClip を単一ノード変数で RETURN する Cypher。query のようなプロパティ射影（RETURN c.name）や複数変数（RETURN t, c）は不可。例: MATCH (c:MidiClip {name:"Bass"}) RETURN c'
+}
+
 function toNoteDescription(input: NoteInput): NoteDescription {
     const note: NoteDescription = {
         pitch: input.pitch,
@@ -52,7 +56,7 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
             description:
                 "select で選んだ 1 つの MidiClip の notes を置換する（mode: replace）。各ノートは pitch/startTime/duration/velocity 等。",
             inputSchema: {
-                select: z.string().min(1).describe("MidiClip を 1 変数で RETURN する Cypher"),
+                select: z.string().min(1).describe(selectDescription()),
                 notes: z.array(noteSchema),
                 mode: z.enum(["replace"]).default("replace"),
                 preview: z.boolean().optional(),

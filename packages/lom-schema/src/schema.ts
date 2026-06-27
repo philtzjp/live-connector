@@ -1,4 +1,4 @@
-import type { LomSchema } from "./types"
+import type { LomSchema, QueryContract } from "./types"
 
 const WARP_MODES = ["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"]
 
@@ -14,6 +14,56 @@ const GRID_QUANTIZATIONS = [
     "Sixteenth",
     "ThirtySecond",
 ]
+
+export const startable_labels: string[] = [
+    "Song",
+    "Track",
+    "MidiTrack",
+    "AudioTrack",
+    "ReturnTrack",
+    "MainTrack",
+    "Clip",
+    "MidiClip",
+    "AudioClip",
+    "Device",
+    "RackDevice",
+    "DrumRack",
+    "Simpler",
+    "Scene",
+    "CuePoint",
+]
+
+export const query_contract: QueryContract = {
+    grammar: "MATCH <pattern> [WHERE <expr>] RETURN <items> [LIMIT <integer>]",
+    start_labels: startable_labels,
+    read: {
+        tool: "query",
+        return_contract:
+            "RETURN は *, ノード変数、プロパティ射影、カンマ区切りの組み合わせを許可する。",
+        allowed_returns: [
+            "RETURN *",
+            "RETURN node_variable",
+            "RETURN node_variable.property",
+            "RETURN item1, item2, ...",
+        ],
+    },
+    select: {
+        tools: ["set_track", "set_clip", "set_scene", "set_device_parameter", "write_notes"],
+        return_contract:
+            "書き込み系 select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。",
+        valid_examples: [
+            'MATCH (t:Track {name:"Drums"}) RETURN t',
+            'MATCH (c:MidiClip {name:"Bass"}) RETURN c',
+            'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
+        ],
+        invalid_examples: [
+            "MATCH (t:Track) RETURN t.name",
+            "MATCH (t:Track)-[:HAS_CLIPSLOT]->(s:ClipSlot) RETURN t, s",
+            "MATCH (n:Note) RETURN n",
+        ],
+        hint: "Note / Parameter / ClipSlot など start_labels に無いラベルは、Song / Track / Clip / Device などから relationship で辿る。",
+    },
+}
 
 /**
  * LOM のグラフスキーマ（ラベル・プロパティ・リレーション）の正本。

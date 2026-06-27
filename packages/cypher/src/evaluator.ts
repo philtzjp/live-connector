@@ -36,6 +36,9 @@ type Binding<N> = {
     current: N
 }
 
+const select_return_hint =
+    'Selection query must RETURN exactly one bound node variable. For write-tool select, use e.g. MATCH (t:Track {name:"Drums"}) RETURN t. Do not return properties such as RETURN t.name or multiple variables such as RETURN t, c; those forms are only for the read-only query tool.'
+
 function valuesEqual(left: ScalarValue, right: ScalarValue): boolean {
     return left === right
 }
@@ -213,9 +216,7 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
     const returns = query.returns
     const target = returns[0]
     if (returns.length !== 1 || target === undefined || target.kind !== "variable") {
-        throw new BadRequestError(
-            "Selection query must RETURN exactly one node variable, e.g. RETURN t",
-        )
+        throw new BadRequestError(select_return_hint)
     }
     const bindings = await matchBindings(query, adapter)
     const seen = new Set<unknown>()
@@ -223,7 +224,9 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
     for (const binding of bindings) {
         const node = binding.vars.get(target.variable)
         if (node === undefined) {
-            throw new BadRequestError(`Unknown variable "${target.variable}" in RETURN`)
+            throw new BadRequestError(
+                `Unknown variable "${target.variable}" in RETURN. Return one variable bound in MATCH, e.g. MATCH (t:Track) RETURN t`,
+            )
         }
         const id = adapter.identity(node)
         if (!seen.has(id)) {

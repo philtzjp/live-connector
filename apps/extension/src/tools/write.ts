@@ -23,6 +23,10 @@ function textResult(payload: unknown, isError = false): ToolResult {
     return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError }
 }
 
+function selectDescription(label: string, example: string): string {
+    return `${label} を単一ノード変数で RETURN する Cypher。query のようなプロパティ射影（RETURN t.name）や複数変数（RETURN t, c）は不可。例: ${example}`
+}
+
 /** select でノードを解決し、ラベル検証・ガードレールを経てプロパティを適用する共通処理。 */
 async function runSetTool(
     deps: ServerDeps,
@@ -115,7 +119,12 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             title: "Track プロパティ書き込み",
             description: "select で選んだ Track に name/arm/mute/solo を書き込む。",
             inputSchema: {
-                select: z.string().min(1).describe("Track を 1 変数で RETURN する Cypher"),
+                select: z
+                    .string()
+                    .min(1)
+                    .describe(
+                        selectDescription("Track", 'MATCH (t:Track {name:"Drums"}) RETURN t'),
+                    ),
                 set: z.object({
                     name: z.string().optional(),
                     arm: z.boolean().optional(),
@@ -136,7 +145,10 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             description:
                 "select で選んだ Clip に name/color/muted/looping（AudioClip は warping/warpMode）を書き込む。",
             inputSchema: {
-                select: z.string().min(1).describe("Clip を 1 変数で RETURN する Cypher"),
+                select: z
+                    .string()
+                    .min(1)
+                    .describe(selectDescription("Clip", 'MATCH (c:Clip {name:"Loop"}) RETURN c')),
                 set: z.object({
                     name: z.string().optional(),
                     color: z.number().optional(),
@@ -160,7 +172,10 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             title: "Scene プロパティ書き込み",
             description: "select で選んだ Scene に name を書き込む。",
             inputSchema: {
-                select: z.string().min(1).describe("Scene を 1 変数で RETURN する Cypher"),
+                select: z
+                    .string()
+                    .min(1)
+                    .describe(selectDescription("Scene", "MATCH (s:Scene {index:0}) RETURN s")),
                 set: z.object({ name: z.string().optional() }),
                 ...previewShape,
             },
@@ -175,7 +190,15 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             title: "DeviceParameter 値書き込み",
             description: "select で選んだ Parameter の value を書き込む。",
             inputSchema: {
-                select: z.string().min(1).describe("Parameter を 1 変数で RETURN する Cypher"),
+                select: z
+                    .string()
+                    .min(1)
+                    .describe(
+                        selectDescription(
+                            "Parameter",
+                            'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
+                        ),
+                    ),
                 set: z.object({ value: z.number() }),
                 ...previewShape,
             },
