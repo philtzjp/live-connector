@@ -1,5 +1,5 @@
 import { AudioTrack, MidiTrack, type Track } from "@ableton-extensions/sdk"
-import { toProblemDetails } from "@live-connector/error"
+import { toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 
@@ -55,7 +55,7 @@ export function registerOverviewTool(server: McpServer, deps: ServerDeps): void 
             } catch (error) {
                 deps.log.error("get_overview failed", { error: String(error) })
                 return {
-                    content: [{ type: "text", text: JSON.stringify(toProblemDetails(error)) }],
+                    content: [{ type: "text", text: JSON.stringify(toMcpError(error), null, 2) }],
                     isError: true,
                 }
             }

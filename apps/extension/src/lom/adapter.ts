@@ -45,9 +45,12 @@ const VALID_RELATIONSHIP_TYPES = new Set(
 )
 
 const startable_label_hint = startable_labels.join(", ")
+const unusable_start_label_hint =
+    "Start from one of the valid start labels, then expand with relationships to reach Note, Parameter, ClipSlot, Mixer, Chain or TakeLane."
 const relationship_type_hint = LOM_SCHEMA.relationships
     .map((relationship) => relationship.type)
     .join(", ")
+const valid_relationship_types = LOM_SCHEMA.relationships.map((relationship) => relationship.type)
 
 const WARP_MODE_NAMES = ["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"]
 
@@ -116,6 +119,10 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
         if (label === null) {
             throw new BadRequestError(
                 `Starting node pattern must specify a label. Usable start labels: ${startable_label_hint}. Example: MATCH (t:Track) RETURN t`,
+                {
+                    hint: "Add a label to the first node pattern, e.g. MATCH (t:Track) RETURN t.",
+                    validStartLabels: startable_labels,
+                },
             )
         }
         const song = this.song
@@ -166,6 +173,7 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
         }
         throw new BadRequestError(
             `Label "${label}" cannot start a pattern. Usable start labels: ${startable_label_hint}. For labels such as Note, Parameter, ClipSlot, Mixer, Chain or TakeLane, start from a usable label and expand with relationships.`,
+            { hint: unusable_start_label_hint, validStartLabels: startable_labels },
         )
     }
 
@@ -181,6 +189,10 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
         if (!VALID_RELATIONSHIP_TYPES.has(relationshipType)) {
             throw new BadRequestError(
                 `Unknown relationship type "${relationshipType}". Valid relationships: ${relationship_type_hint}`,
+                {
+                    hint: "Use one of the valid relationship types from the schema tool.",
+                    validRelationships: valid_relationship_types,
+                },
             )
         }
         if (node.type === "note") {
@@ -685,11 +697,14 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
     }
 
     private unknownProperty(label: string, property: string): BadRequestError {
-        const valid = propertiesForLabel(label)
-            .map((definition) => definition.name)
-            .join(", ")
+        const valid_properties = propertiesForLabel(label).map((definition) => definition.name)
+        const valid = valid_properties.join(", ")
         return new BadRequestError(
             `Unknown property "${property}" on ${label}. Valid properties: ${valid}`,
+            {
+                hint: `Use one of the properties defined for ${label} in the schema tool.`,
+                validProperties: valid_properties,
+            },
         )
     }
 }
