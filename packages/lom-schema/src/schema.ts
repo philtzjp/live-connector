@@ -50,6 +50,7 @@ export const query_contract: QueryContract = {
     select: {
         tools: [
             "create_clip",
+            "render_audio",
             "set_track",
             "set_clip",
             "set_scene",
@@ -57,8 +58,9 @@ export const query_contract: QueryContract = {
             "write_notes",
         ],
         return_contract:
-            "書き込み系 select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。",
+            "単一対象ツールの select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。",
         valid_examples: [
+            'MATCH (t:AudioTrack {name:"Print"}) RETURN t',
             'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',
             'MATCH (t:Track {name:"Drums"}) RETURN t',
             'MATCH (c:MidiClip {name:"Bass"}) RETURN c',
@@ -255,6 +257,7 @@ export const LOM_SCHEMA: LomSchema = {
 export const EXAMPLE_QUERIES: string[] = [
     "MATCH (t:Track) RETURN t.index, t.name, t.kind, t.mute, t.arm",
     'MATCH (:Track {name:"Drums"})-[:HAS_DEVICE]->(:Device {name:"Operator"})-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p.value, p.min, p.max',
+    'MATCH (t:AudioTrack {name:"Print"}) RETURN t',
     'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',
     "MATCH (t:MidiTrack {mute:true})-[:HAS_CLIPSLOT]->(:ClipSlot)-[:HAS_CLIP]->(c:Clip) RETURN t.name, c.index, c.name",
     "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n",
