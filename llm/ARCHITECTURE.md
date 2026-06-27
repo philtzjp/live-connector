@@ -98,6 +98,27 @@ sequenceDiagram
 
 `activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。`loadEnv()` は host/port/token を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`LIVE_CONNECTOR_MCP_TOKEN` が設定されている場合のみ、`/api/v1/mcp` に Bearer 認証が適用される。
 
+## 配布フロー
+
+```mermaid
+sequenceDiagram
+    participant user as Developer
+    participant pnpm as pnpm package
+    participant turbo as turbo run package
+    participant build as apps/extension build:production
+    participant cli as extensions-cli package
+    participant dist as dist/live-connector-<version>.ablx
+
+    user->>pnpm: pnpm package
+    pnpm->>turbo: turbo run package
+    turbo->>build: tsx build.ts --production
+    build-->>turbo: dist/extension.js
+    turbo->>cli: extensions-cli package . -o dist/live-connector-<version>.ablx
+    cli-->>dist: manifest.json + dist/extension.js
+```
+
+`pnpm package` は root script から Turborepo の `package` task を実行する。`@live-connector/extension` の package script は production bundle を生成した後、`manifest.json` の `name` と `version` から `.ablx` の出力名を決め、SDK CLI の `extensions-cli package` に渡す。`.ablx` は `apps/extension/dist/` に生成される。
+
 ## HTTP エンドポイント
 
 | method | path | 認証 | 用途 |

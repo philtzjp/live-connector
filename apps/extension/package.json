@@ -7,6 +7,7 @@
     "scripts": {
         "build": "tsx build.ts",
         "build:production": "tsx build.ts --production",
+        "package": "pnpm run build:production && tsx package.ts",
         "typecheck": "tsc --noEmit",
         "start": "tsx build.ts && extensions-cli run"
     },

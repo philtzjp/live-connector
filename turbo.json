@@ -5,6 +5,10 @@
             "dependsOn": ["^build"],
             "outputs": ["dist/**"]
         },
+        "package": {
+            "dependsOn": ["^build"],
+            "outputs": ["dist/*.ablx"]
+        },
         "typecheck": {
             "dependsOn": ["^typecheck"]
         }

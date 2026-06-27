@@ -46,6 +46,18 @@ RETURN p.value, p.min, p.max
 5. MCP クライアントから `http://127.0.0.1:7799/api/v1/mcp` に接続する
    - ヘルスチェック: `http://127.0.0.1:7799/health`
 
+### 配布用 `.ablx` の生成
+
+配布用アーカイブは SDK CLI の `extensions-cli package` で生成します。リポジトリルートで次を実行すると、production build の後に `apps/extension/dist/live-connector-1.0.0.ablx` が生成されます。
+
+```sh
+pnpm package
+```
+
+出力ファイル名は `apps/extension/manifest.json` の `name` と `version` から決まります。`.ablx` には `manifest.json` と `manifest.entry` が指す `dist/extension.js` が含まれます。
+
+エンドユーザーが配布物を読み込む場合は、Ableton Live の Preferences → Extensions で Developer Mode を有効にし、生成された `.ablx` を Extensions ページへドロップします。
+
 ### Claude Code への登録
 
 プロジェクトルートに `.mcp.json`（`.gitignore` 済み）を置くと Claude Code から利用できます:
