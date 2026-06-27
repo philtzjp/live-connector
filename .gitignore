@@ -4,6 +4,9 @@
 # 設計ドキュメント（ローカル限定・非公開）
 /MCP-DESIGN.md
 
+# Claude Code MCP 登録（Bearer トークンを含むためローカル限定）
+/.mcp.json
+
 # Node
 node_modules/
 dist/
@@ -20,3 +23,5 @@ dist/
 # OS / エディタ
 .DS_Store
 *.log
+
+Fable5.txt
