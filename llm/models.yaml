@@ -491,6 +491,23 @@ models:
             type: "string"
             required: false
 
+    - name: "QueryContract"
+      kind: "lom_schema_type"
+      source: "packages/lom-schema/src/types.ts"
+      fields:
+          - name: "grammar"
+            type: "string"
+            required: true
+          - name: "start_labels"
+            type: "string[]"
+            required: true
+          - name: "read"
+            type: "{ tool: string; return_contract: string; allowed_returns: string[] }"
+            required: true
+          - name: "select"
+            type: "{ tools: string[]; return_contract: string; valid_examples: string[]; invalid_examples: string[]; hint: string }"
+            required: true
+
     - name: "LomSchema"
       kind: "lom_schema_type"
       source: "packages/lom-schema/src/types.ts"
@@ -555,6 +572,7 @@ mcp_tools:
               type: "TextContent[]"
               text_json_shape:
                   schema: "LomSchema"
+                  query_contract: "QueryContract"
                   examples: "string[]"
 
     - name: "get_overview"
@@ -620,7 +638,7 @@ mcp_tools:
           select:
               type: "string"
               required: true
-              contract: "Track を 1 変数で RETURN する Cypher"
+              contract: "Track を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           set:
               name:
                   type: "string"
@@ -647,7 +665,7 @@ mcp_tools:
           select:
               type: "string"
               required: true
-              contract: "Clip を 1 変数で RETURN する Cypher"
+              contract: "Clip を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           set:
               name:
                   type: "string"
@@ -680,7 +698,7 @@ mcp_tools:
           select:
               type: "string"
               required: true
-              contract: "Scene を 1 変数で RETURN する Cypher"
+              contract: "Scene を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           set:
               name:
                   type: "string"
@@ -698,7 +716,7 @@ mcp_tools:
           select:
               type: "string"
               required: true
-              contract: "Parameter を 1 変数で RETURN する Cypher"
+              contract: "Parameter を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           set:
               value:
                   type: "number"
@@ -716,7 +734,7 @@ mcp_tools:
           select:
               type: "string"
               required: true
-              contract: "MidiClip を 1 変数で RETURN する Cypher"
+              contract: "MidiClip を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           notes:
               type: "NoteInput[]"
               required: true
@@ -977,6 +995,25 @@ cypher_contract:
         pattern: "(node)-[:REL|OTHER*min..max]->(node)"
         node: "(variable?:Label? { property: scalar, ... }?)"
     default_max_hops_when_omitted: 8
+    start_labels:
+        source: "packages/lom-schema/src/schema.ts#startable_labels"
+        allowed:
+            - "Song"
+            - "Track"
+            - "MidiTrack"
+            - "AudioTrack"
+            - "ReturnTrack"
+            - "MainTrack"
+            - "Clip"
+            - "MidiClip"
+            - "AudioClip"
+            - "Device"
+            - "RackDevice"
+            - "DrumRack"
+            - "Simpler"
+            - "Scene"
+            - "CuePoint"
+        note: "Note / Parameter / ClipSlot などは起点にできない。起点ラベルから relationship で辿る。"
     read_return_contract:
         tool: "query"
         allowed:
@@ -985,14 +1022,20 @@ cypher_contract:
             - "RETURN node_variable.property"
             - "comma-separated combinations"
     write_select_return_contract:
+        source: "packages/lom-schema/src/schema.ts#query_contract"
         tools:
             - "set_track"
             - "set_clip"
             - "set_scene"
             - "set_device_parameter"
             - "write_notes"
-        required: "RETURN exactly one node variable"
-        example: "MATCH (t:Track {name:\"Drums\"}) RETURN t"
+        required: "RETURN exactly one bound node variable"
+        valid_examples:
+            - "MATCH (t:Track {name:\"Drums\"}) RETURN t"
+            - "MATCH (c:MidiClip {name:\"Bass\"}) RETURN c"
+        invalid_examples:
+            - "MATCH (t:Track) RETURN t.name"
+            - "MATCH (t:Track)-[:HAS_CLIPSLOT]->(s:ClipSlot) RETURN t, s"
 
 error_models:
     type_namespace: "urn:live-connector:error"

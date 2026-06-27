@@ -1,4 +1,4 @@
-import { EXAMPLE_QUERIES, LOM_SCHEMA } from "@live-connector/lom-schema"
+import { EXAMPLE_QUERIES, LOM_SCHEMA, query_contract } from "@live-connector/lom-schema"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ServerDeps } from "../deps"
 
@@ -12,14 +12,14 @@ export function registerSchemaTool(server: McpServer, _deps: ServerDeps): void {
         {
             title: "LOM グラフスキーマ",
             description:
-                "Live Object Model のグラフスキーマ（ラベル・プロパティ r/w・リレーション・enum）と例クエリを返す。Cypher クエリを書く前にこれを参照する。",
+                "Live Object Model のグラフスキーマ、起点に使えるラベル、query/read と write/select の RETURN 契約、例クエリを返す。Cypher クエリを書く前にこれを参照する。",
         },
         async () => ({
             content: [
                 {
                     type: "text",
                     text: JSON.stringify(
-                        { schema: LOM_SCHEMA, examples: EXAMPLE_QUERIES },
+                        { schema: LOM_SCHEMA, query_contract, examples: EXAMPLE_QUERIES },
                         null,
                         2,
                     ),

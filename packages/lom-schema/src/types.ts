@@ -35,6 +35,23 @@ export type RelationshipDef = {
     description?: string
 }
 
+export type QueryContract = {
+    grammar: string
+    start_labels: string[]
+    read: {
+        tool: string
+        return_contract: string
+        allowed_returns: string[]
+    }
+    select: {
+        tools: string[]
+        return_contract: string
+        valid_examples: string[]
+        invalid_examples: string[]
+        hint: string
+    }
+}
+
 export type LomSchema = {
     version: string
     nodes: NodeLabelDef[]

@@ -25,7 +25,12 @@ import {
 } from "@ableton-extensions/sdk"
 import type { GraphAdapter, ScalarValue } from "@live-connector/cypher"
 import { BadRequestError } from "@live-connector/error"
-import { isSubtypeOf, LOM_SCHEMA, propertiesForLabel } from "@live-connector/lom-schema"
+import {
+    isSubtypeOf,
+    LOM_SCHEMA,
+    propertiesForLabel,
+    startable_labels,
+} from "@live-connector/lom-schema"
 import type { TargetApiVersion } from "../deps"
 
 type V = TargetApiVersion
@@ -38,6 +43,11 @@ export type LomNode = ObjectNode | NoteNode
 const VALID_RELATIONSHIP_TYPES = new Set(
     LOM_SCHEMA.relationships.map((relationship) => relationship.type),
 )
+
+const startable_label_hint = startable_labels.join(", ")
+const relationship_type_hint = LOM_SCHEMA.relationships
+    .map((relationship) => relationship.type)
+    .join(", ")
 
 const WARP_MODE_NAMES = ["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"]
 
@@ -104,7 +114,9 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
 
     async seeds(label: string | null): Promise<LomNode[]> {
         if (label === null) {
-            throw new BadRequestError("Starting node pattern must specify a label, e.g. (t:Track)")
+            throw new BadRequestError(
+                `Starting node pattern must specify a label. Usable start labels: ${startable_label_hint}. Example: MATCH (t:Track) RETURN t`,
+            )
         }
         const song = this.song
 
@@ -153,7 +165,7 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
             return song.cuePoints.map((cue, index) => objectNode(cue, "CuePoint", index))
         }
         throw new BadRequestError(
-            `Label "${label}" cannot start a pattern. Start from Song, Track, Clip, Device, Scene or CuePoint and expand with relationships.`,
+            `Label "${label}" cannot start a pattern. Usable start labels: ${startable_label_hint}. For labels such as Note, Parameter, ClipSlot, Mixer, Chain or TakeLane, start from a usable label and expand with relationships.`,
         )
     }
 
@@ -167,7 +179,9 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
 
     private expandOne(node: LomNode, relationshipType: string): LomNode[] {
         if (!VALID_RELATIONSHIP_TYPES.has(relationshipType)) {
-            throw new BadRequestError(`Unknown relationship type "${relationshipType}"`)
+            throw new BadRequestError(
+                `Unknown relationship type "${relationshipType}". Valid relationships: ${relationship_type_hint}`,
+            )
         }
         if (node.type === "note") {
             return []
