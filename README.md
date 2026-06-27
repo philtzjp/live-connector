@@ -20,51 +20,17 @@ MATCH (:Track {name:"Drums"})-[:HAS_DEVICE]->(:Device {name:"Operator"})-[:HAS_P
 RETURN p.value, p.min, p.max
 ```
 
-## ステータス
-
-**実装済み・実機動作確認済み。** Ableton Live 12 Beta + Developer Mode で拡張をロードし、MCP クライアントから `query` / `get_overview` などが実 Live Set に対して動作することを end-to-end で確認しています。今後の拡張は [Issues](https://github.com/philtzjp/live-connector/issues) を参照してください。
-
-## MCP ツール
-
-| ツール | 種別 | 説明 |
-| --- | --- | --- |
-| `schema` | 内省 | LOM グラフスキーマ（ラベル・プロパティ r/w・リレーション・enum）と例クエリを返す |
-| `get_overview` | 読み | tempo・スケール・トラック概要・シーン数などを 1 コールで返す |
-| `query` | 読み | Cypher サブセット（`MATCH … WHERE … RETURN … LIMIT`）で LOM を読む |
-| `set_song` | 書き | Song の tempo を書き込む |
-| `set_track` | 書き | 選択した Track に name / arm / mute / solo を書き込む |
-| `set_clip` | 書き | 選択した Clip に name / color / muted / looping（Audio は warping / warpMode）を書き込む |
-| `set_scene` | 書き | 選択した Scene に name を書き込む |
-| `set_device_parameter` | 書き | 選択した Parameter の value を書き込む |
-| `write_notes` | 書き | 選択した 1 つの MidiClip の notes を置換する |
-
-- **読み取り**は Cypher クエリ（可変長リレーション `*1..6`・抽象ラベル `Track`/`Clip`/`Device` 対応）。
-- **書き込み**は「Cypher の `select` で対象を選ぶ＋型付き `set`」の宣言的モデル。`preview`（ドライラン）/ `confirm`（大量変更）/ `withinTransaction`（1 undo step）のガードレール付き。
-
-## アーキテクチャ概略
-
-```
-AI エージェント / MCP クライアント
-      │  MCP over localhost（HTTP / Streamable）
-      ▼
-Ableton Extension (Node.js, activate() 内で MCP サーバーを起動)
-   ├─ Cypher クエリエンジン（@live-connector/cypher、SDK 非依存）
-   ├─ LomGraphAdapter（ラベル→SDK 種別 / リレーション→子アクセサ / プロパティ→getter・setter）
-   ├─ 読み / 書きツール（query / set_* / write_notes）
-   └─ schema 内省（@live-connector/lom-schema）
-      ▼
-Ableton Live （Extension Host 経由で Live Set を操作）
-```
-
-## 前提
+## セットアップと起動
 
 > **重要:** Ableton Extensions SDK 本体は本リポジトリに**同梱していません**。各自 Ableton から入手し、`ableton-sdk/`（`.gitignore` 済み）に配置してください。
+
+### 前提
 
 - Node.js（Extension Host は同梱ランタイム ≥ 24.14.1 を使用）+ pnpm
 - Ableton Live（Extensions 対応の Beta ビルド）+ Preferences → Extensions → **Developer Mode** 有効化
 - Ableton Extensions SDK 配布物（`ableton-create-extension` / `ableton-extensions-sdk` / `ableton-extensions-cli`）を `ableton-sdk/` に配置
 
-## セットアップと起動
+### 起動
 
 1. 依存をインストール: `pnpm install`
 2. `apps/extension/.env`（`.gitignore` 済み）を作成:
@@ -77,7 +43,7 @@ Ableton Live （Extension Host 経由で Live Set を操作）
 3. Live を起動し、Developer Mode を ON にする
 4. 拡張をビルド＆起動: `pnpm --filter @live-connector/extension start`
    - 成功すると Max Window に `MCP HTTP server listening ... :7799` が出る
-5. MCP クライアント（例: Claude Code）から `http://127.0.0.1:7799/api/v1/mcp` に接続する
+5. MCP クライアントから `http://127.0.0.1:7799/api/v1/mcp` に接続する
    - ヘルスチェック: `http://127.0.0.1:7799/health`
 
 ### Claude Code への登録
@@ -118,12 +84,6 @@ Ableton Live （Extension Host 経由で Live Set を操作）
 ├── LICENSE                 # MIT（自作分） + Ableton SDK の第三者条項
 └── README.md
 ```
-
-## 実装メモ
-
-MCP トランスポートは Node 標準 `http` 上で `@modelcontextprotocol/sdk` の `StreamableHTTPServerTransport`（ステートレス）として動作する。
-
-Extension Host は拡張バンドルを Node の `vm` コンテキストで評価し、当該コンテキストには Web 標準グローバル（`Request` / `Response` / `TextEncoder` / `URL` / `AbortController` 等）がほぼ存在しない。そのため `apps/extension/build.ts` で動的 `import()` を require に変換し、必要な Web グローバルを esbuild の `banner` で polyfill している。
 
 ## ライセンス
 
