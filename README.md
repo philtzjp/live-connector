@@ -38,13 +38,13 @@ RETURN p.value, p.min, p.max
    EXTENSION_HOST_PATH=/Applications/Ableton Live 12 Beta.app   # 各自の Live のパス
    LIVE_CONNECTOR_MCP_HOST=127.0.0.1
    LIVE_CONNECTOR_MCP_PORT=7799
-   # LIVE_CONNECTOR_MCP_TOKEN=...   # 設定した場合のみ Bearer 認証を有効化（未設定=認証なし）
    ```
 3. Live を起動し、Developer Mode を ON にする
 4. 拡張をビルド＆起動: `pnpm --filter @live-connector/extension start`
    - 成功すると Max Window に `MCP HTTP server listening ... :7799` が出る
 5. MCP クライアントから `http://127.0.0.1:7799/api/v1/mcp` に接続する
    - ヘルスチェック: `http://127.0.0.1:7799/health`
+   - `/api/v1/mcp` は loopback Host / Origin header のみを許可する
 
 ### 配布用 `.ablx` の生成
 
@@ -72,8 +72,6 @@ pnpm package
   }
 }
 ```
-
-トークンを有効にした場合は `"headers": { "Authorization": "Bearer <token>" }` を追加します。
 
 ## プリセット探索とデバイス状態
 

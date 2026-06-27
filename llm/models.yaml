@@ -135,15 +135,11 @@ models:
             type: "string"
             required: false
             default: "127.0.0.1"
+            note: "loopback host のみ許可する。"
           - name: "LIVE_CONNECTOR_MCP_PORT"
             type: "number"
             required: false
             default: 7799
-          - name: "LIVE_CONNECTOR_MCP_TOKEN"
-            type: "string"
-            required: false
-            default: null
-            note: "設定されている場合のみ /api/v1/mcp に Bearer 認証を適用する。"
 
     - name: "ServerDeps"
       kind: "dependency_container"
@@ -200,7 +196,7 @@ models:
             response: "HealthResponse"
           - method: "POST"
             path: "/api/v1/mcp"
-            auth: "Bearer when LIVE_CONNECTOR_MCP_TOKEN is set"
+            auth: "loopback Host and Origin header validation"
             transport: "StreamableHTTPServerTransport"
 
     - name: "TextContent"

@@ -96,7 +96,7 @@ sequenceDiagram
     http->>mcp: createMcpServer(deps) per request
 ```
 
-`activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。`loadEnv()` は host/port/token を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`LIVE_CONNECTOR_MCP_TOKEN` が設定されている場合のみ、`/api/v1/mcp` に Bearer 認証が適用される。
+`activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。`loadEnv()` は loopback host と port を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
 
 ## 配布フロー
 
@@ -124,7 +124,7 @@ sequenceDiagram
 | method | path | 認証 | 用途 |
 | --- | --- | --- | --- |
 | `GET` | `/health` | なし | `application/health+json` のヘルスチェック |
-| `POST` | `/api/v1/mcp` | `LIVE_CONNECTOR_MCP_TOKEN` 設定時のみ Bearer | Streamable HTTP MCP endpoint |
+| `POST` | `/api/v1/mcp` | loopback Host / Origin header 検証 | Streamable HTTP MCP endpoint |
 
 ## MCP ツール
 
