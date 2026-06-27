@@ -9,6 +9,7 @@
     },
     "scripts": {
         "build": "turbo run build",
+        "package": "turbo run package",
         "typecheck": "turbo run typecheck",
         "format": "biome format --write .",
         "lint": "biome check ."
