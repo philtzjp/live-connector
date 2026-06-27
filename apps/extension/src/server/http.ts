@@ -41,7 +41,10 @@ export function startMcpHttpServer(args: StartArgs): Promise<ServerInfo> {
         ),
     )
 
-    app.use(MCP_PATH, bearerAuth({ token: env.LIVE_CONNECTOR_MCP_TOKEN }))
+    const token = env.LIVE_CONNECTOR_MCP_TOKEN
+    if (token !== undefined) {
+        app.use(MCP_PATH, bearerAuth({ token }))
+    }
 
     app.all(MCP_PATH, async (c) => {
         const server = createMcpServer(deps)
