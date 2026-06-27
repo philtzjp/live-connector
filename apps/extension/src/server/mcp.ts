@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ServerDeps } from "../deps"
+import { registerArrangementTools } from "../tools/arrangement"
 import { registerAudioTools } from "../tools/audio"
 import { registerCreateTools } from "../tools/create"
 import { registerNotesTool } from "../tools/notes"
@@ -15,6 +16,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     registerOverviewTool(server, deps)
     registerQueryTool(server, deps)
     registerAudioTools(server, deps)
+    registerArrangementTools(server, deps)
     registerCreateTools(server, deps)
     registerWriteTools(server, deps)
     registerNotesTool(server, deps)

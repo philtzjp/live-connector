@@ -357,6 +357,10 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
             this.writeScene(target, property, value)
             return
         }
+        if (target instanceof CuePoint) {
+            this.writeCuePoint(target, property, value)
+            return
+        }
         if (target instanceof Song) {
             this.writeSong(target, property, value)
             return
@@ -431,6 +435,14 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
             return
         }
         throw this.unknownProperty("Scene", property)
+    }
+
+    private writeCuePoint(cue: CuePoint<V>, property: string, value: ScalarValue): void {
+        if (property === "name") {
+            cue.name = this.expectString(cue, property, value)
+            return
+        }
+        throw this.unknownProperty("CuePoint", property)
     }
 
     private writeSong(song: Song<V>, property: string, value: ScalarValue): void {
@@ -650,10 +662,14 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
     }
 
     private readCuePoint(cue: CuePoint<V>, label: string, property: string): ScalarValue {
-        if (property === "time") {
-            return cue.time
+        switch (property) {
+            case "name":
+                return cue.name
+            case "time":
+                return cue.time
+            default:
+                throw this.unknownProperty(label, property)
         }
-        throw this.unknownProperty(label, property)
     }
 
     private readTakeLane(lane: TakeLane<V>, label: string, property: string): ScalarValue {
