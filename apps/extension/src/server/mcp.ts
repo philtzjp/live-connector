@@ -1,8 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ServerDeps } from "../deps"
+import { registerNotesTool } from "../tools/notes"
 import { registerOverviewTool } from "../tools/overview"
 import { registerQueryTool } from "../tools/query"
 import { registerSchemaTool } from "../tools/schema"
+import { registerWriteTools } from "../tools/write"
 
 /** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
 export function createMcpServer(deps: ServerDeps): McpServer {
@@ -10,5 +12,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     registerSchemaTool(server, deps)
     registerOverviewTool(server, deps)
     registerQueryTool(server, deps)
+    registerWriteTools(server, deps)
+    registerNotesTool(server, deps)
     return server
 }

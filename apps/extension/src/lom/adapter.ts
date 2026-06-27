@@ -39,6 +39,8 @@ const VALID_RELATIONSHIP_TYPES = new Set(
     LOM_SCHEMA.relationships.map((relationship) => relationship.type),
 )
 
+const WARP_MODE_NAMES = ["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"]
+
 const TRACK_KIND_BY_LABEL: Record<string, string> = {
     MidiTrack: "midi",
     AudioTrack: "audio",
@@ -293,6 +295,169 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
             out[property.name] = await this.readRaw(node, property.name)
         }
         return out
+    }
+
+    identity(node: LomNode): unknown {
+        return node.value
+    }
+
+    async setProperty(node: LomNode, property: string, value: ScalarValue): Promise<void> {
+        if (node.type === "note") {
+            throw new BadRequestError("Note properties are written via write_notes, not set_*")
+        }
+        const definition = propertiesForLabel(node.label).find(
+            (candidate) => candidate.name === property,
+        )
+        if (definition === undefined) {
+            throw this.unknownProperty(node.label, property)
+        }
+        if (definition.access !== "rw") {
+            throw new BadRequestError(`Property "${property}" on ${node.label} is read-only`)
+        }
+        const target = node.value
+        if (target instanceof Track) {
+            this.writeTrack(target, property, value)
+            return
+        }
+        if (target instanceof AudioClip) {
+            this.writeAudioClip(target, property, value)
+            return
+        }
+        if (target instanceof Clip) {
+            this.writeClip(target, property, value)
+            return
+        }
+        if (target instanceof Scene) {
+            this.writeScene(target, property, value)
+            return
+        }
+        if (target instanceof Song) {
+            this.writeSong(target, property, value)
+            return
+        }
+        if (target instanceof DeviceParameter) {
+            await this.writeParameter(target, property, value)
+            return
+        }
+        throw new BadRequestError(`Cannot write property "${property}" on ${node.label}`)
+    }
+
+    private writeTrack(track: Track<V>, property: string, value: ScalarValue): void {
+        switch (property) {
+            case "name":
+                track.name = this.expectString(track, property, value)
+                return
+            case "mute":
+                track.mute = this.expectBoolean(track, property, value)
+                return
+            case "solo":
+                track.solo = this.expectBoolean(track, property, value)
+                return
+            case "arm":
+                track.arm = this.expectBoolean(track, property, value)
+                return
+            default:
+                throw this.unknownProperty("Track", property)
+        }
+    }
+
+    private writeClip(clip: Clip<V>, property: string, value: ScalarValue): void {
+        switch (property) {
+            case "name":
+                clip.name = this.expectString(clip, property, value)
+                return
+            case "color":
+                clip.color = this.expectNumber(clip, property, value)
+                return
+            case "muted":
+                clip.muted = this.expectBoolean(clip, property, value)
+                return
+            case "looping":
+                clip.looping = this.expectBoolean(clip, property, value)
+                return
+            default:
+                throw this.unknownProperty("Clip", property)
+        }
+    }
+
+    private writeAudioClip(clip: AudioClip<V>, property: string, value: ScalarValue): void {
+        if (property === "warping") {
+            clip.warping = this.expectBoolean(clip, property, value)
+            return
+        }
+        if (property === "warpMode") {
+            const name = this.expectString(clip, property, value)
+            const mode = (WarpMode as unknown as Record<string, WarpMode>)[name]
+            if (mode === undefined) {
+                throw new BadRequestError(
+                    `Invalid warpMode "${name}". Valid: ${WARP_MODE_NAMES.join(", ")}`,
+                )
+            }
+            clip.warpMode = mode
+            return
+        }
+        this.writeClip(clip, property, value)
+    }
+
+    private writeScene(scene: Scene<V>, property: string, value: ScalarValue): void {
+        if (property === "name") {
+            scene.name = this.expectString(scene, property, value)
+            return
+        }
+        throw this.unknownProperty("Scene", property)
+    }
+
+    private writeSong(song: Song<V>, property: string, value: ScalarValue): void {
+        if (property === "tempo") {
+            song.tempo = this.expectNumber(song, property, value)
+            return
+        }
+        throw this.unknownProperty("Song", property)
+    }
+
+    private async writeParameter(
+        parameter: DeviceParameter<V>,
+        property: string,
+        value: ScalarValue,
+    ): Promise<void> {
+        if (property === "value") {
+            await parameter.setValue(this.expectNumber(parameter, property, value))
+            return
+        }
+        throw this.unknownProperty("Parameter", property)
+    }
+
+    private expectString(
+        _target: DataModelObject<V>,
+        property: string,
+        value: ScalarValue,
+    ): string {
+        if (typeof value !== "string") {
+            throw new BadRequestError(`Property "${property}" expects a string value`)
+        }
+        return value
+    }
+
+    private expectNumber(
+        _target: DataModelObject<V>,
+        property: string,
+        value: ScalarValue,
+    ): number {
+        if (typeof value !== "number") {
+            throw new BadRequestError(`Property "${property}" expects a number value`)
+        }
+        return value
+    }
+
+    private expectBoolean(
+        _target: DataModelObject<V>,
+        property: string,
+        value: ScalarValue,
+    ): boolean {
+        if (typeof value !== "boolean") {
+            throw new BadRequestError(`Property "${property}" expects a boolean value`)
+        }
+        return value
     }
 
     private async readRaw(node: LomNode, property: string): Promise<unknown> {
