@@ -11,7 +11,7 @@ flowchart LR
     agent["AI agent / MCP client"]
     http["Node http server<br/>apps/extension/src/server/http.ts"]
     mcp["MCP server<br/>apps/extension/src/server/mcp.ts"]
-    tools["MCP tools<br/>schema / get_overview / query / render_audio / create_clip / set_* / write_notes"]
+    tools["MCP tools<br/>schema / get_overview / query / render_audio / create_* / delete_* / set_* / write_notes"]
     cypher["@live-connector/cypher<br/>parser / evaluator / selector"]
     adapter["LomGraphAdapter<br/>apps/extension/src/lom/adapter.ts"]
     sdk["Ableton Extensions SDK"]
@@ -131,14 +131,19 @@ sequenceDiagram
 | tool | 種別 | 説明 |
 | --- | --- | --- |
 | `schema` | read | `LOM_SCHEMA` と `EXAMPLE_QUERIES` を返す |
-| `get_overview` | read | tempo、scale、track 概要、scene/cue count を返す |
+| `get_overview` | read | tempo、scale、track 概要、アレンジクリップ、CuePoint、scene/cue count を返す |
 | `query` | read | Cypher サブセットを parse/evaluate して行集合を返す |
 | `render_audio` | read/render | 1 つの AudioTrack の arrangement pre-FX 音声を WAV にレンダリングしてパスを返す |
+| `create_arrangement_clip` | write | 1 つの MidiTrack / AudioTrack に arrangement Clip を startTime/duration 指定で作成する |
+| `delete_arrangement_clip` | write | 1 つの arrangement Clip を削除する |
+| `create_cue_point` | write | time 指定で CuePoint を作成し、任意で `name` を設定する |
+| `delete_cue_point` | write | 1 つの CuePoint を削除する |
 | `create_clip` | write | 空の MidiTrack ClipSlot に指定 length の空 MidiClip を生成する |
 | `set_song` | write | Song の `tempo` を書き込む |
 | `set_track` | write | Track の `name` / `arm` / `mute` / `solo` を書き込む |
 | `set_clip` | write | Clip / AudioClip の mutable property を書き込む |
 | `set_scene` | write | Scene の `name` を書き込む |
+| `set_cue_point` | write | CuePoint の `name` を書き込む |
 | `set_device_parameter` | write | Parameter の `value` を書き込む |
 | `write_notes` | write | 1 つの MidiClip の notes を replace する |
 
@@ -173,7 +178,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant client as MCP client
-    participant tool as render_audio / create_clip / set_* / write_notes
+    participant tool as render_audio / create_* / delete_* / set_* / write_notes
     participant parser as parseQuery()
     participant selector as selectNodes()
     participant adapter as LomGraphAdapter
@@ -191,13 +196,13 @@ sequenceDiagram
         tool-->>client: preview payload
     else commit
         tool->>context: withinTransaction()
-        context->>adapter: setProperty(), slot.createMidiClip() or clip.notes = descriptions
+        context->>adapter: setProperty(), create/delete clip, create/delete cue, clip.notes = descriptions
         adapter->>live: SDK write/create
         tool-->>client: ok payload
     end
 ```
 
-単一対象ツールの `select` は対象ノード集合を解決する selector であり、`RETURN` は単一ノード変数に限定される。`render_audio` はちょうど 1 つの `AudioTrack` を要求し、指定 beat 範囲の arrangement pre-FX 音声を WAV として生成する。`create_clip` はちょうど 1 つの空 `ClipSlot` を要求し、親が `MidiTrack` である場合のみ空 `MidiClip` を生成する。`set_*` は対象件数が `CONFIRM_THRESHOLD` を超える場合に `confirm:true` を要求する。`write_notes` はちょうど 1 つの `MidiClip` を要求し、notes を replace する。
+単一対象ツールの `select` は対象ノード集合を解決する selector であり、`RETURN` は単一ノード変数に限定される。`render_audio` はちょうど 1 つの `AudioTrack` を要求し、指定 beat 範囲の arrangement pre-FX 音声を WAV として生成する。`create_arrangement_clip` はちょうど 1 つの `MidiTrack` または `AudioTrack` を要求し、arrangement timeline に `startTime` / `duration` 指定で clip を作成する。`delete_arrangement_clip` は `HAS_ARRANGEMENT_CLIP` で辿れる clip だけを削除し、session clip は対象外とする。`create_cue_point` / `delete_cue_point` は Song の CuePoint を作成・削除する。`create_clip` はちょうど 1 つの空 `ClipSlot` を要求し、親が `MidiTrack` である場合のみ空 `MidiClip` を生成する。`set_*` は対象件数が `CONFIRM_THRESHOLD` を超える場合に `confirm:true` を要求する。`set_cue_point` は `CuePoint.name` を書き込む。`write_notes` はちょうど 1 つの `MidiClip` を要求し、notes を replace する。
 
 ## データ所有
 
@@ -224,6 +229,7 @@ flowchart LR
 - MCP tool error は `toMcpError()` により `{ error, detail, hint?, validProperties?, validRelationships?, validStartLabels? }` 形式で返る。HTTP の `status` / `type` / `instance` は MCP tool error には含めない。
 - HTTP 層のエラーは `toProblemDetails()` により RFC 9457 Problem Details 形式を維持する。
 - `query` の `RETURN` は射影を許可するが、書き込み系 `select` の `RETURN` は単一ノード変数に限定される。
+- `Clip.startTime` / `startMarker` / `endMarker` / `loopStart` / `loopEnd` は SDK 上 read-only であり、arrangement clip の移動・トリムは直接ツール化しない。必要な場合は削除と再作成で表現する。
 - Cypher サブセットは `MATCH ... [WHERE ...] RETURN ... [LIMIT n]`、有向 relationship、可変長 hop、基本比較演算を対象にする。
 - `LomGraphAdapter.seeds()` で開始できるラベルは `Song` / `Track` family / `Clip` family / `Device` family / `Scene` / `CuePoint` である。
 - `ableton-sdk/` は外部配布物であり、workspace には同梱しない。

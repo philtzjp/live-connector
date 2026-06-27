@@ -19,6 +19,7 @@ source_files:
         - "apps/extension/src/tools/overview.ts"
         - "apps/extension/src/tools/query.ts"
         - "apps/extension/src/tools/audio.ts"
+        - "apps/extension/src/tools/arrangement.ts"
         - "apps/extension/src/tools/create.ts"
         - "apps/extension/src/tools/write.ts"
         - "apps/extension/src/tools/notes.ts"
@@ -666,6 +667,13 @@ mcp_tools:
                   returnTrackCount: "number"
                   sceneCount: "number"
                   cuePointCount: "number"
+                  arrangementEndTime: "number"
+                  cuePoints:
+                      type: "array"
+                      item:
+                          index: "number"
+                          name: "string"
+                          time: "number"
                   tracks:
                       type: "array"
                       item:
@@ -675,6 +683,16 @@ mcp_tools:
                           mute: "boolean"
                           solo: "boolean"
                           arm: "boolean"
+                          arrangementClipCount: "number"
+                          arrangementClips:
+                              type: "array"
+                              item:
+                                  index: "number"
+                                  _label: "\"MidiClip\" | \"AudioClip\" | \"Clip\""
+                                  name: "string"
+                                  startTime: "number"
+                                  endTime: "number"
+                                  duration: "number"
 
     - name: "query"
       source: "apps/extension/src/tools/query.ts"
@@ -718,6 +736,144 @@ mcp_tools:
                       index: "number"
                       name: "string"
                       kind: "\"audio\""
+
+    - name: "create_arrangement_clip"
+      source: "apps/extension/src/tools/arrangement.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "MidiTrack または AudioTrack を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          startTime:
+              type: "number"
+              required: true
+              constraints: ["value >= 0"]
+          duration:
+              type: "number"
+              required: true
+              constraints: ["positive"]
+          name:
+              type: "string"
+              required: false
+          audioFilePath:
+              type: "string"
+              required: false
+              note: "AudioTrack を選択した場合は必須。"
+          isWarped:
+              type: "boolean"
+              required: false
+          loopSettings:
+              type: "ClipLoopSettings"
+              required: false
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  track:
+                      index: "number"
+                      name: "string"
+                      kind: "\"midi\" | \"audio\""
+                  startTime:
+                      optional: true
+                      type: "number"
+                  duration:
+                      optional: true
+                      type: "number"
+                  audioFilePath:
+                      optional: true
+                      type: "string"
+                  clip:
+                      optional: true
+                      shape:
+                          _label: "\"MidiClip\" | \"AudioClip\" | \"Clip\""
+                          index: "number | null"
+                          name: "string"
+                          startTime: "number"
+                          endTime: "number"
+                          duration: "number"
+
+    - name: "delete_arrangement_clip"
+      source: "apps/extension/src/tools/arrangement.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "アレンジメント Clip を単一ノード変数で RETURN する Cypher。Session Clip は不可。"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  track:
+                      index: "number"
+                      name: "string"
+                  clip:
+                      _label: "\"MidiClip\" | \"AudioClip\" | \"Clip\""
+                      index: "number | null"
+                      name: "string"
+                      startTime: "number"
+                      endTime: "number"
+                      duration: "number"
+
+    - name: "create_cue_point"
+      source: "apps/extension/src/tools/arrangement.ts"
+      input:
+          time:
+              type: "number"
+              required: true
+              constraints: ["value >= 0"]
+          name:
+              type: "string"
+              required: false
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  time:
+                      optional: true
+                      type: "number"
+                  name:
+                      optional: true
+                      type: "string"
+                  cuePoint:
+                      optional: true
+                      shape:
+                          _label: "\"CuePoint\""
+                          index: "number | null"
+                          name: "string"
+                          time: "number"
+
+    - name: "delete_cue_point"
+      source: "apps/extension/src/tools/arrangement.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "CuePoint を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  cuePoint:
+                      _label: "\"CuePoint\""
+                      index: "number | null"
+                      name: "string"
+                      time: "number"
 
     - name: "create_clip"
       source: "apps/extension/src/tools/create.ts"
@@ -849,6 +1005,24 @@ mcp_tools:
               type: "boolean"
               required: false
 
+    - name: "set_cue_point"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "CuePoint を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          set:
+              name:
+                  type: "string"
+                  required: false
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+
     - name: "set_device_parameter"
       source: "apps/extension/src/tools/write.ts"
       input:
@@ -910,6 +1084,84 @@ tool_support_models:
             type: "number"
             required: true
             constraints: ["positive"]
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "ClipLoopSettings"
+      source: "@ableton-extensions/sdk"
+      fields:
+          - name: "looping"
+            type: "boolean"
+            required: true
+          - name: "startMarker"
+            type: "number"
+            required: true
+          - name: "endMarker"
+            type: "number"
+            required: true
+          - name: "loopStart"
+            type: "number"
+            required: true
+          - name: "loopEnd"
+            type: "number"
+            required: true
+    - name: "CreateArrangementClipParams"
+      source: "apps/extension/src/tools/arrangement.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "startTime"
+            type: "number"
+            required: true
+            constraints: ["value >= 0"]
+          - name: "duration"
+            type: "number"
+            required: true
+            constraints: ["positive"]
+          - name: "name"
+            type: "string | undefined"
+            required: true
+          - name: "audioFilePath"
+            type: "string | undefined"
+            required: true
+          - name: "isWarped"
+            type: "boolean | undefined"
+            required: true
+          - name: "loopSettings"
+            type: "ClipLoopSettings | undefined"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "DeleteArrangementClipParams"
+      source: "apps/extension/src/tools/arrangement.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "CreateCuePointParams"
+      source: "apps/extension/src/tools/arrangement.ts"
+      fields:
+          - name: "time"
+            type: "number"
+            required: true
+            constraints: ["value >= 0"]
+          - name: "name"
+            type: "string | undefined"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "DeleteCuePointParams"
+      source: "apps/extension/src/tools/arrangement.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
           - name: "preview"
             type: "boolean | undefined"
             required: true
@@ -992,6 +1244,45 @@ tool_result_shapes:
                   clipSlot: "Record<string, unknown>"
                   length: "number"
                   clip: "{ _label: \"MidiClip\", name: string, duration: number, startTime: number, endTime: number, noteCount: number }"
+    create_arrangement_clip:
+        statuses:
+            - status: "preview"
+              fields:
+                  track: "{ index: number, name: string, kind: \"midi\" | \"audio\" }"
+                  startTime: "number"
+                  duration: "number"
+                  audioFilePath: "string | undefined"
+            - status: "ok"
+              fields:
+                  track: "{ index: number, name: string, kind: \"midi\" | \"audio\" }"
+                  clip: "{ _label: \"MidiClip\" | \"AudioClip\" | \"Clip\", index: number | null, name: string, startTime: number, endTime: number, duration: number }"
+    delete_arrangement_clip:
+        statuses:
+            - status: "preview"
+              fields:
+                  track: "{ index: number, name: string }"
+                  clip: "{ _label: \"MidiClip\" | \"AudioClip\" | \"Clip\", index: number | null, name: string, startTime: number, endTime: number, duration: number }"
+            - status: "ok"
+              fields:
+                  track: "{ index: number, name: string }"
+                  clip: "{ _label: \"MidiClip\" | \"AudioClip\" | \"Clip\", index: number | null, name: string, startTime: number, endTime: number, duration: number }"
+    create_cue_point:
+        statuses:
+            - status: "preview"
+              fields:
+                  time: "number"
+                  name: "string | undefined"
+            - status: "ok"
+              fields:
+                  cuePoint: "{ _label: \"CuePoint\", index: number | null, name: string, time: number }"
+    delete_cue_point:
+        statuses:
+            - status: "preview"
+              fields:
+                  cuePoint: "{ _label: \"CuePoint\", index: number | null, name: string, time: number }"
+            - status: "ok"
+              fields:
+                  cuePoint: "{ _label: \"CuePoint\", index: number | null, name: string, time: number }"
     set_tools:
         statuses:
             - status: "no_match"
@@ -1160,6 +1451,7 @@ lom_graph:
         - label: "CuePoint"
           properties:
               - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "rw" }
               - { name: "time", type: "number", access: "r" }
         - label: "TakeLane"
           properties:
@@ -1220,18 +1512,24 @@ cypher_contract:
         source: "packages/lom-schema/src/schema.ts#query_contract"
         tools:
             - "create_clip"
+            - "create_arrangement_clip"
+            - "delete_arrangement_clip"
+            - "delete_cue_point"
             - "render_audio"
             - "set_track"
             - "set_clip"
             - "set_scene"
+            - "set_cue_point"
             - "set_device_parameter"
             - "write_notes"
         required: "RETURN exactly one bound node variable"
         valid_examples:
             - "MATCH (t:AudioTrack {name:\"Print\"}) RETURN t"
             - "MATCH (t:MidiTrack {name:\"Drums\"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s"
+            - "MATCH (t:Track {name:\"Print\"})-[:HAS_ARRANGEMENT_CLIP]->(c:Clip {index:0}) RETURN c"
             - "MATCH (t:Track {name:\"Drums\"}) RETURN t"
             - "MATCH (c:MidiClip {name:\"Bass\"}) RETURN c"
+            - "MATCH (c:CuePoint {name:\"Verse\"}) RETURN c"
         invalid_examples:
             - "MATCH (t:Track) RETURN t.name"
             - "MATCH (t:Track)-[:HAS_CLIPSLOT]->(s:ClipSlot) RETURN t, s"

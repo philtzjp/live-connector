@@ -190,6 +190,26 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
     )
 
     server.registerTool(
+        "set_cue_point",
+        {
+            title: "CuePoint プロパティ書き込み",
+            description: "select で選んだ CuePoint に name を書き込む。",
+            inputSchema: {
+                select: z
+                    .string()
+                    .min(1)
+                    .describe(
+                        selectDescription("CuePoint", 'MATCH (c:CuePoint {name:"Verse"}) RETURN c'),
+                    ),
+                set: z.object({ name: z.string().optional() }),
+                ...previewShape,
+            },
+        },
+        async ({ select, set, preview, confirm }) =>
+            runSetTool(deps, "CuePoint", { select, set, preview, confirm }),
+    )
+
+    server.registerTool(
         "set_device_parameter",
         {
             title: "DeviceParameter 値書き込み",
