@@ -1,7 +1,8 @@
 import * as fs from "node:fs"
 import * as esbuild from "esbuild"
+import type { ExtensionManifest } from "./src/types/manifest"
 
-const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8")) as { entry: string }
+const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8")) as ExtensionManifest
 const production = process.argv.includes("--production")
 
 // Node 組み込みから取れる Web グローバルは、どのモジュール初期化よりも先に必要なため
