@@ -18,7 +18,7 @@ flowchart LR
     live["Ableton Live Set"]
     schema["@live-connector/lom-schema<br/>LOM_SCHEMA"]
     env["@live-connector/env<br/>typed environment"]
-    error["@live-connector/error<br/>AppError / ProblemDetails"]
+    error["@live-connector/error<br/>AppError / ProblemDetails / McpError"]
     log["@live-connector/log<br/>scoped logger"]
 
     agent -->|"POST /api/v1/mcp"| http
@@ -72,7 +72,7 @@ flowchart TB
 | `packages/cypher` | Cypher サブセットの tokenizer/parser/AST/evaluator。Ableton SDK へ依存しない |
 | `packages/lom-schema` | LOM グラフスキーマ、ラベル、プロパティ、リレーション、例クエリの正本 |
 | `packages/env` | 環境変数の zod 検証と型付き `Env` の提供 |
-| `packages/error` | `AppError` 系のエラー定義と RFC 9457 Problem Details 変換 |
+| `packages/error` | `AppError` 系のエラー定義、HTTP 用 RFC 9457 Problem Details 変換、MCP 用構造化エラー変換 |
 | `packages/log` | scope 付き logger の生成と標準出力/標準エラーへの集約 |
 | `packages/tsconfig` | 共有 TypeScript 設定 |
 
@@ -198,7 +198,8 @@ flowchart LR
 
 ## 現在の制約
 
-- MCP tool error は現状 `toProblemDetails()` により HTTP Problem Details 形式で返る。
+- MCP tool error は `toMcpError()` により `{ error, detail, hint?, validProperties?, validRelationships?, validStartLabels? }` 形式で返る。HTTP の `status` / `type` / `instance` は MCP tool error には含めない。
+- HTTP 層のエラーは `toProblemDetails()` により RFC 9457 Problem Details 形式を維持する。
 - `query` の `RETURN` は射影を許可するが、書き込み系 `select` の `RETURN` は単一ノード変数に限定される。
 - Cypher サブセットは `MATCH ... [WHERE ...] RETURN ... [LIMIT n]`、有向 relationship、可変長 hop、基本比較演算を対象にする。
 - `LomGraphAdapter.seeds()` で開始できるラベルは `Song` / `Track` family / `Clip` family / `Device` family / `Scene` / `CuePoint` である。
