@@ -1,8 +1,6 @@
-import { timingSafeEqual } from "node:crypto"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
 import type { Env } from "@live-connector/env"
 import {
-    AuthError,
     BadRequestError,
     MethodNotAllowedError,
     NotFoundError,
@@ -21,6 +19,7 @@ const MCP_PATH = "/api/v1/mcp"
 const HEALTH_PATH = "/health"
 const SERVICE_VERSION = "0.0.0"
 const MAX_BODY_BYTES = 1024 * 1024
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"])
 
 type RequestContext = {
     deps: ServerDeps
@@ -66,37 +65,87 @@ function writeProblem(
 function requestPath(request: IncomingMessage, env: Env): string {
     const url = new URL(
         request.url ?? "/",
-        `http://${env.LIVE_CONNECTOR_MCP_HOST}:${env.LIVE_CONNECTOR_MCP_PORT}`,
+        `http://${formatUrlHost(env.LIVE_CONNECTOR_MCP_HOST)}:${env.LIVE_CONNECTOR_MCP_PORT}`,
     )
     return url.pathname
 }
 
-function timingSafeEqualString(actual: string, expected: string): boolean {
-    const actual_buffer = Buffer.from(actual)
-    const expected_buffer = Buffer.from(expected)
-    if (actual_buffer.length !== expected_buffer.length) {
-        return false
+function singleHeaderValue(value: string | string[] | undefined): string | undefined {
+    if (Array.isArray(value)) {
+        return undefined
     }
-    return timingSafeEqual(actual_buffer, expected_buffer)
+    return value
 }
 
-function assertBearerAuth(request: IncomingMessage, env: Env): void {
-    const expected_token = env.LIVE_CONNECTOR_MCP_TOKEN
-    if (expected_token === undefined) {
-        return
+function normalizeLoopbackHost(host: string): string {
+    const normalized_host = host.trim().toLowerCase()
+    if (normalized_host.startsWith("[") && normalized_host.endsWith("]")) {
+        return normalized_host.slice(1, -1)
+    }
+    return normalized_host
+}
+
+function isLoopbackHost(host: string): boolean {
+    return LOOPBACK_HOSTS.has(normalizeLoopbackHost(host))
+}
+
+function formatUrlHost(host: string): string {
+    const normalized_host = normalizeLoopbackHost(host)
+    if (normalized_host === "::1") {
+        return "[::1]"
+    }
+    return normalized_host
+}
+
+function parseHostHeader(value: string): { host: string; port: number } | undefined {
+    try {
+        const url = new URL(`http://${value}`)
+        const port = Number.parseInt(url.port, 10)
+        if (!Number.isInteger(port)) {
+            return undefined
+        }
+        return {
+            host: normalizeLoopbackHost(url.hostname),
+            port,
+        }
+    } catch {
+        return undefined
+    }
+}
+
+function isAllowedOrigin(origin: string): boolean {
+    try {
+        const url = new URL(origin)
+        if (url.protocol !== "http:" && url.protocol !== "https:") {
+            return false
+        }
+        if (url.pathname !== "/" || url.search !== "" || url.hash !== "") {
+            return false
+        }
+        return isLoopbackHost(url.hostname)
+    } catch {
+        return false
+    }
+}
+
+function assertLocalRequestHeaders(request: IncomingMessage, env: Env): void {
+    const host_header = singleHeaderValue(request.headers.host)
+    if (host_header === undefined) {
+        throw new BadRequestError("Host header is required")
     }
 
-    const header = request.headers.authorization
-    if (header === undefined) {
-        throw new AuthError("Missing bearer token")
-    }
-    if (!header.startsWith("Bearer ")) {
-        throw new AuthError("Missing bearer token")
+    const parsed_host = parseHostHeader(host_header)
+    if (
+        parsed_host === undefined ||
+        parsed_host.port !== env.LIVE_CONNECTOR_MCP_PORT ||
+        !isLoopbackHost(parsed_host.host)
+    ) {
+        throw new BadRequestError("Host header is not allowed")
     }
 
-    const actual_token = header.slice("Bearer ".length)
-    if (!timingSafeEqualString(actual_token, expected_token)) {
-        throw new AuthError("Invalid bearer token")
+    const origin_header = singleHeaderValue(request.headers.origin)
+    if (origin_header !== undefined && !isAllowedOrigin(origin_header)) {
+        throw new BadRequestError("Origin header is not allowed")
     }
 }
 
@@ -177,9 +226,9 @@ async function handleMcp(
     }
 
     try {
-        assertBearerAuth(request, context.env)
+        assertLocalRequestHeaders(request, context.env)
     } catch (error) {
-        writeProblem(response, error, { "www-authenticate": "Bearer" })
+        writeProblem(response, error)
         return
     }
 
@@ -235,7 +284,7 @@ async function routeRequest(
  * Node.js 標準 http と SDK 同梱 StreamableHTTPServerTransport で MCP サーバーを起動する。
  *
  * - `/health`: 認証不要のヘルスチェック（draft-inadarei 準拠）。
- * - `/api/v1/mcp`: `LIVE_CONNECTOR_MCP_TOKEN` 設定時のみ Bearer 認証付きの MCP エンドポイント。
+ * - `/api/v1/mcp`: loopback Host / Origin 検証付きの MCP エンドポイント。
  */
 export function startMcpHttpServer(args: StartArgs): Promise<ServerInfo> {
     const context: RequestContext = { deps: args.deps, env: args.env, log: args.log }
