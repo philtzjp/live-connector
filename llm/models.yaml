@@ -21,6 +21,7 @@ source_files:
         - "apps/extension/src/tools/audio.ts"
         - "apps/extension/src/tools/arrangement.ts"
         - "apps/extension/src/tools/create.ts"
+        - "apps/extension/src/tools/presets.ts"
         - "apps/extension/src/tools/write.ts"
         - "apps/extension/src/tools/notes.ts"
     lom_adapter:
@@ -737,6 +738,55 @@ mcp_tools:
                       name: "string"
                       kind: "\"audio\""
 
+    - name: "search_presets"
+      source: "apps/extension/src/tools/presets.ts"
+      input:
+          roots:
+              type: "string[]"
+              required: true
+              constraints: ["min length 1", "absolute paths after ~ expansion"]
+          extensions:
+              type: "string[]"
+              required: false
+              default: ".adv/.adg/.alc/.als/.aupreset/.fxb/.fxp/.nmsv/.serumpreset/.vstpreset"
+          nameContains:
+              type: "string"
+              required: false
+          limit:
+              type: "number"
+              required: false
+              default: 200
+              constraints: ["integer", "1 <= value <= 2000"]
+          maxDepth:
+              type: "number"
+              required: false
+              default: 8
+              constraints: ["integer", "0 <= value <= 32"]
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"ok\""
+                  count: "number"
+                  limit: "number"
+                  limitReached: "boolean"
+                  presets:
+                      type: "array"
+                      item:
+                          name: "string"
+                          path: "string"
+                          type: "string"
+                          ext: "string"
+                          tags: "string[] | undefined"
+                  roots:
+                      type: "array"
+                      item:
+                          root: "string"
+                          scannedFiles: "number"
+                          matchedFiles: "number"
+                          error: "string | undefined"
+                  note: "string"
+
     - name: "create_arrangement_clip"
       source: "apps/extension/src/tools/arrangement.ts"
       input:
@@ -1041,6 +1091,74 @@ mcp_tools:
               type: "boolean"
               required: false
 
+    - name: "save_device_state"
+      source: "apps/extension/src/tools/presets.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Device を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          stateName:
+              type: "string"
+              required: true
+          overwrite:
+              type: "boolean"
+              required: false
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  stateName: "string"
+                  device:
+                      name: "string"
+                  parameterCount: "number"
+                  filePath: "string"
+
+    - name: "apply_device_state"
+      source: "apps/extension/src/tools/presets.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Device を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          stateName:
+              type: "string"
+              required: true
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"confirm_required\" | \"ok\""
+                  stateName: "string"
+                  sourceDevice:
+                      optional: true
+                      type: "string"
+                  targetDevice:
+                      optional: true
+                      type: "string"
+                  matched:
+                      optional: true
+                      type: "number"
+                  applied:
+                      optional: true
+                      type: "number"
+                  changes:
+                      optional: true
+                      type: "DeviceParameterChange[]"
+                  hint:
+                      optional: true
+                      type: "string"
+
     - name: "write_notes"
       source: "apps/extension/src/tools/notes.ts"
       input:
@@ -1165,6 +1283,162 @@ tool_support_models:
           - name: "preview"
             type: "boolean | undefined"
             required: true
+    - name: "SearchPresetsParams"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "roots"
+            type: "string[]"
+            required: true
+          - name: "extensions"
+            type: "string[] | undefined"
+            required: true
+          - name: "nameContains"
+            type: "string | undefined"
+            required: true
+          - name: "limit"
+            type: "number | undefined"
+            required: true
+          - name: "maxDepth"
+            type: "number | undefined"
+            required: true
+    - name: "PresetSearchResult"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "name"
+            type: "string"
+            required: true
+          - name: "path"
+            type: "string"
+            required: true
+          - name: "type"
+            type: "string"
+            required: true
+          - name: "ext"
+            type: "string"
+            required: true
+          - name: "tags"
+            type: "string[]"
+            required: false
+    - name: "RootSearchSummary"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "root"
+            type: "string"
+            required: true
+          - name: "scannedFiles"
+            type: "number"
+            required: true
+          - name: "matchedFiles"
+            type: "number"
+            required: true
+          - name: "error"
+            type: "string"
+            required: false
+    - name: "DeviceParameterValueItemState"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "index"
+            type: "number"
+            required: true
+          - name: "name"
+            type: "string"
+            required: true
+          - name: "shortName"
+            type: "string"
+            required: true
+    - name: "DeviceParameterState"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "index"
+            type: "number"
+            required: true
+          - name: "name"
+            type: "string"
+            required: true
+          - name: "value"
+            type: "number"
+            required: true
+          - name: "min"
+            type: "number"
+            required: true
+          - name: "max"
+            type: "number"
+            required: true
+          - name: "defaultValue"
+            type: "number"
+            required: true
+          - name: "isQuantized"
+            type: "boolean"
+            required: true
+          - name: "valueItems"
+            type: "DeviceParameterValueItemState[]"
+            required: true
+          - name: "valueItem"
+            type: "DeviceParameterValueItemState | null"
+            required: true
+    - name: "DeviceStateFile"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "schemaVersion"
+            type: "\"1.0\""
+            required: true
+          - name: "kind"
+            type: "\"live_connector_device_state\""
+            required: true
+          - name: "stateName"
+            type: "string"
+            required: true
+          - name: "deviceName"
+            type: "string"
+            required: true
+          - name: "parameters"
+            type: "DeviceParameterState[]"
+            required: true
+    - name: "SaveDeviceStateParams"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "stateName"
+            type: "string"
+            required: true
+          - name: "overwrite"
+            type: "boolean | undefined"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "ApplyDeviceStateParams"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "stateName"
+            type: "string"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+          - name: "confirm"
+            type: "boolean | undefined"
+            required: true
+    - name: "DeviceParameterChange"
+      source: "apps/extension/src/tools/presets.ts"
+      fields:
+          - name: "name"
+            type: "string"
+            required: true
+          - name: "from"
+            type: "number"
+            required: true
+          - name: "to"
+            type: "number"
+            required: true
+          - name: "valueItem"
+            type: "DeviceParameterValueItemState | null"
+            required: true
     - name: "SetParams"
       source: "apps/extension/src/tools/write.ts"
       fields:
@@ -1283,6 +1557,50 @@ tool_result_shapes:
             - status: "ok"
               fields:
                   cuePoint: "{ _label: \"CuePoint\", index: number | null, name: string, time: number }"
+    search_presets:
+        statuses:
+            - status: "ok"
+              fields:
+                  count: "number"
+                  limit: "number"
+                  limitReached: "boolean"
+                  presets: "PresetSearchResult[]"
+                  roots: "RootSearchSummary[]"
+                  note: "string"
+    save_device_state:
+        statuses:
+            - status: "preview"
+              fields:
+                  stateName: "string"
+                  device: "{ name: string }"
+                  parameterCount: "number"
+                  filePath: "string"
+            - status: "ok"
+              fields:
+                  stateName: "string"
+                  device: "{ name: string }"
+                  parameterCount: "number"
+                  filePath: "string"
+    apply_device_state:
+        statuses:
+            - status: "preview"
+              fields:
+                  stateName: "string"
+                  sourceDevice: "string"
+                  targetDevice: "string"
+                  matched: "number"
+                  changes: "DeviceParameterChange[]"
+            - status: "confirm_required"
+              fields:
+                  stateName: "string"
+                  matched: "number"
+                  hint: "string"
+            - status: "ok"
+              fields:
+                  stateName: "string"
+                  sourceDevice: "string"
+                  targetDevice: "string"
+                  applied: "number"
     set_tools:
         statuses:
             - status: "no_match"
@@ -1521,6 +1839,8 @@ cypher_contract:
             - "set_scene"
             - "set_cue_point"
             - "set_device_parameter"
+            - "save_device_state"
+            - "apply_device_state"
             - "write_notes"
         required: "RETURN exactly one bound node variable"
         valid_examples:
@@ -1530,6 +1850,7 @@ cypher_contract:
             - "MATCH (t:Track {name:\"Drums\"}) RETURN t"
             - "MATCH (c:MidiClip {name:\"Bass\"}) RETURN c"
             - "MATCH (c:CuePoint {name:\"Verse\"}) RETURN c"
+            - "MATCH (:Track {name:\"Lead\"})-[:HAS_DEVICE]->(d:Device {name:\"Operator\"}) RETURN d"
         invalid_examples:
             - "MATCH (t:Track) RETURN t.name"
             - "MATCH (t:Track)-[:HAS_CLIPSLOT]->(s:ClipSlot) RETURN t, s"

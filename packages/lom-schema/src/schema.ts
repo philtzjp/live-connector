@@ -59,6 +59,8 @@ export const query_contract: QueryContract = {
             "set_scene",
             "set_cue_point",
             "set_device_parameter",
+            "save_device_state",
+            "apply_device_state",
             "write_notes",
         ],
         return_contract:
@@ -71,6 +73,7 @@ export const query_contract: QueryContract = {
             'MATCH (c:MidiClip {name:"Bass"}) RETURN c',
             'MATCH (c:CuePoint {name:"Verse"}) RETURN c',
             'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
+            'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(d:Device {name:"Operator"}) RETURN d',
         ],
         invalid_examples: [
             "MATCH (t:Track) RETURN t.name",
