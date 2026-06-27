@@ -11,6 +11,7 @@ source_files:
         - "apps/extension/src/tools/schema.ts"
         - "apps/extension/src/tools/overview.ts"
         - "apps/extension/src/tools/query.ts"
+        - "apps/extension/src/tools/create.ts"
         - "apps/extension/src/tools/write.ts"
         - "apps/extension/src/tools/notes.ts"
     lom_adapter:
@@ -660,6 +661,41 @@ mcp_tools:
                   count: "number"
                   rows: "Row[]"
 
+    - name: "create_clip"
+      source: "apps/extension/src/tools/create.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "空の ClipSlot を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          length:
+              type: "number"
+              required: true
+              constraints: ["positive"]
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  track:
+                      index: "number"
+                      name: "string"
+                      kind: "\"midi\""
+                  clipSlot: "Record<string, unknown>"
+                  length: "number"
+                  clip:
+                      optional: true
+                      shape:
+                          _label: "\"MidiClip\""
+                          name: "string"
+                          duration: "number"
+                          startTime: "number"
+                          endTime: "number"
+                          noteCount: "number"
+
     - name: "set_song"
       source: "apps/extension/src/tools/write.ts"
       input:
@@ -792,6 +828,19 @@ mcp_tools:
               required: false
 
 tool_support_models:
+    - name: "CreateClipParams"
+      source: "apps/extension/src/tools/create.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "length"
+            type: "number"
+            required: true
+            constraints: ["positive"]
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
     - name: "SetParams"
       source: "apps/extension/src/tools/write.ts"
       fields:
@@ -842,6 +891,19 @@ tool_support_models:
             required: false
 
 tool_result_shapes:
+    create_clip:
+        statuses:
+            - status: "preview"
+              fields:
+                  track: "{ index: number, name: string, kind: \"midi\" }"
+                  clipSlot: "Record<string, unknown>"
+                  length: "number"
+            - status: "ok"
+              fields:
+                  track: "{ index: number, name: string, kind: \"midi\" }"
+                  clipSlot: "Record<string, unknown>"
+                  length: "number"
+                  clip: "{ _label: \"MidiClip\", name: string, duration: number, startTime: number, endTime: number, noteCount: number }"
     set_tools:
         statuses:
             - status: "no_match"
@@ -1069,6 +1131,7 @@ cypher_contract:
     write_select_return_contract:
         source: "packages/lom-schema/src/schema.ts#query_contract"
         tools:
+            - "create_clip"
             - "set_track"
             - "set_clip"
             - "set_scene"
@@ -1076,6 +1139,7 @@ cypher_contract:
             - "write_notes"
         required: "RETURN exactly one bound node variable"
         valid_examples:
+            - "MATCH (t:MidiTrack {name:\"Drums\"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s"
             - "MATCH (t:Track {name:\"Drums\"}) RETURN t"
             - "MATCH (c:MidiClip {name:\"Bass\"}) RETURN c"
         invalid_examples:
