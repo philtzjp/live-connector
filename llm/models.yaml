@@ -1,0 +1,1016 @@
+schema_version: "1.0"
+description: "live-connector の TypeScript 型、MCP ツール入出力、LOM グラフモデルの目録。実装変更時に更新する。"
+
+source_files:
+    runtime:
+        - "apps/extension/src/extension.ts"
+        - "apps/extension/src/deps.ts"
+        - "apps/extension/src/server/http.ts"
+        - "apps/extension/src/server/mcp.ts"
+    tools:
+        - "apps/extension/src/tools/schema.ts"
+        - "apps/extension/src/tools/overview.ts"
+        - "apps/extension/src/tools/query.ts"
+        - "apps/extension/src/tools/write.ts"
+        - "apps/extension/src/tools/notes.ts"
+    lom_adapter:
+        - "apps/extension/src/lom/adapter.ts"
+    packages:
+        - "packages/cypher/src/ast.ts"
+        - "packages/cypher/src/evaluator.ts"
+        - "packages/cypher/src/parser.ts"
+        - "packages/cypher/src/tokenizer.ts"
+        - "packages/lom-schema/src/types.ts"
+        - "packages/lom-schema/src/schema.ts"
+        - "packages/env/src/index.ts"
+        - "packages/error/src/index.ts"
+        - "packages/log/src/index.ts"
+
+enums:
+    property_type:
+        source: "packages/lom-schema/src/types.ts"
+        values:
+            - "number"
+            - "string"
+            - "boolean"
+            - "number[]"
+            - "string[]"
+            - "enum"
+    property_access:
+        source: "packages/lom-schema/src/types.ts"
+        values:
+            - "r"
+            - "rw"
+    comparison_operator:
+        source: "packages/cypher/src/ast.ts"
+        values:
+            - "="
+            - "<>"
+            - "<"
+            - ">"
+            - "<="
+            - ">="
+            - "CONTAINS"
+            - "STARTS_WITH"
+            - "IN"
+    token_type:
+        source: "packages/cypher/src/tokenizer.ts"
+        values:
+            - "keyword"
+            - "identifier"
+            - "number"
+            - "string"
+            - "boolean"
+            - "null"
+            - "punct"
+    log_level:
+        source: "packages/log/src/index.ts"
+        values:
+            - "debug"
+            - "info"
+            - "warn"
+            - "error"
+    warp_mode:
+        source: "packages/lom-schema/src/schema.ts"
+        values:
+            - "Beats"
+            - "Tones"
+            - "Texture"
+            - "Repitch"
+            - "Complex"
+            - "ComplexPro"
+    grid_quantization:
+        source: "packages/lom-schema/src/schema.ts"
+        values:
+            - "NoGrid"
+            - "EightBars"
+            - "FourBars"
+            - "TwoBars"
+            - "Bar"
+            - "Half"
+            - "Quarter"
+            - "Eighth"
+            - "Sixteenth"
+            - "ThirtySecond"
+
+models:
+    - name: "Env"
+      kind: "configuration"
+      source: "packages/env/src/index.ts"
+      owner_package: "@live-connector/env"
+      fields:
+          - name: "LIVE_CONNECTOR_MCP_HOST"
+            type: "string"
+            required: false
+            default: "127.0.0.1"
+          - name: "LIVE_CONNECTOR_MCP_PORT"
+            type: "number"
+            required: false
+            default: 7799
+          - name: "LIVE_CONNECTOR_MCP_TOKEN"
+            type: "string"
+            required: false
+            default: null
+            note: "設定されている場合のみ /api/v1/mcp に Bearer 認証を適用する。"
+
+    - name: "ServerDeps"
+      kind: "dependency_container"
+      source: "apps/extension/src/deps.ts"
+      owner_package: "@live-connector/extension"
+      fields:
+          - name: "context"
+            type: "ExtensionContext<\"1.0.0\">"
+            required: true
+          - name: "log"
+            type: "Logger"
+            required: true
+
+    - name: "ServerInfo"
+      kind: "runtime_output"
+      source: "apps/extension/src/server/http.ts"
+      fields:
+          - name: "host"
+            type: "string"
+            required: true
+          - name: "port"
+            type: "number"
+            required: true
+          - name: "mcpPath"
+            type: "string"
+            required: true
+            value: "/api/v1/mcp"
+
+    - name: "HealthResponse"
+      kind: "http_response"
+      source: "apps/extension/src/server/http.ts"
+      content_type: "application/health+json"
+      fields:
+          - name: "status"
+            type: "string"
+            required: true
+            value: "pass"
+          - name: "version"
+            type: "string"
+            required: true
+            value: "0.0.0"
+          - name: "description"
+            type: "string"
+            required: true
+            value: "live-connector MCP server"
+
+    - name: "TextContent"
+      kind: "mcp_content"
+      source: "apps/extension/src/tools/write.ts"
+      fields:
+          - name: "type"
+            type: "\"text\""
+            required: true
+          - name: "text"
+            type: "string"
+            required: true
+
+    - name: "ToolResult"
+      kind: "mcp_result"
+      source: "apps/extension/src/tools/write.ts"
+      fields:
+          - name: "content"
+            type: "TextContent[]"
+            required: true
+          - name: "isError"
+            type: "boolean"
+            required: false
+
+    - name: "ProblemDetails"
+      kind: "error_response"
+      source: "packages/error/src/index.ts"
+      owner_package: "@live-connector/error"
+      standard: "RFC 9457"
+      fields:
+          - name: "type"
+            type: "string"
+            required: true
+          - name: "title"
+            type: "string"
+            required: true
+          - name: "status"
+            type: "number"
+            required: true
+          - name: "detail"
+            type: "string"
+            required: false
+          - name: "instance"
+            type: "string"
+            required: false
+
+    - name: "AppErrorArgs"
+      kind: "error_input"
+      source: "packages/error/src/index.ts"
+      fields:
+          - name: "type"
+            type: "string"
+            required: false
+          - name: "title"
+            type: "string"
+            required: true
+          - name: "status"
+            type: "number"
+            required: true
+          - name: "detail"
+            type: "string"
+            required: false
+
+    - name: "Logger"
+      kind: "service_interface"
+      source: "packages/log/src/index.ts"
+      owner_package: "@live-connector/log"
+      methods:
+          - name: "debug"
+            params: ["message: string", "fields?: LogFields"]
+          - name: "info"
+            params: ["message: string", "fields?: LogFields"]
+          - name: "warn"
+            params: ["message: string", "fields?: LogFields"]
+          - name: "error"
+            params: ["message: string", "fields?: LogFields"]
+
+    - name: "LogFields"
+      kind: "record"
+      source: "packages/log/src/index.ts"
+      type: "Record<string, unknown>"
+
+    - name: "ScalarValue"
+      kind: "cypher_value"
+      source: "packages/cypher/src/ast.ts"
+      type: "string | number | boolean | null"
+
+    - name: "Token"
+      kind: "cypher_token"
+      source: "packages/cypher/src/tokenizer.ts"
+      fields:
+          - name: "type"
+            type: "TokenType"
+            required: true
+          - name: "value"
+            type: "string"
+            required: true
+          - name: "start"
+            type: "number"
+            required: true
+
+    - name: "NodePattern"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "variable"
+            type: "string | null"
+            required: true
+          - name: "label"
+            type: "string | null"
+            required: true
+          - name: "properties"
+            type: "Record<string, ScalarValue>"
+            required: true
+
+    - name: "RelationshipPattern"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "types"
+            type: "string[]"
+            required: true
+          - name: "minHops"
+            type: "number"
+            required: true
+            default: 1
+          - name: "maxHops"
+            type: "number"
+            required: true
+            default: 1
+
+    - name: "PatternPart"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "start"
+            type: "NodePattern"
+            required: true
+          - name: "chain"
+            type: "{ relationship: RelationshipPattern; node: NodePattern }[]"
+            required: true
+
+    - name: "PropertyRef"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "variable"
+            type: "string"
+            required: true
+          - name: "property"
+            type: "string"
+            required: true
+
+    - name: "ComparisonExpr"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "kind"
+            type: "\"comparison\""
+            required: true
+          - name: "left"
+            type: "PropertyRef"
+            required: true
+          - name: "operator"
+            type: "ComparisonOperator"
+            required: true
+          - name: "right"
+            type: "ScalarValue | ScalarValue[]"
+            required: true
+
+    - name: "LogicalExpr"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "kind"
+            type: "\"logical\""
+            required: true
+          - name: "operator"
+            type: "\"AND\" | \"OR\""
+            required: true
+          - name: "left"
+            type: "WhereExpr"
+            required: true
+          - name: "right"
+            type: "WhereExpr"
+            required: true
+
+    - name: "NotExpr"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "kind"
+            type: "\"not\""
+            required: true
+          - name: "expr"
+            type: "WhereExpr"
+            required: true
+
+    - name: "WhereExpr"
+      kind: "cypher_ast_union"
+      source: "packages/cypher/src/ast.ts"
+      variants:
+          - "ComparisonExpr"
+          - "LogicalExpr"
+          - "NotExpr"
+
+    - name: "ReturnItem"
+      kind: "cypher_ast_union"
+      source: "packages/cypher/src/ast.ts"
+      variants:
+          - "{ kind: \"all\" }"
+          - "{ kind: \"variable\"; variable: string }"
+          - "{ kind: \"property\"; variable: string; property: string }"
+
+    - name: "Query"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "pattern"
+            type: "PatternPart"
+            required: true
+          - name: "where"
+            type: "WhereExpr | null"
+            required: true
+          - name: "returns"
+            type: "ReturnItem[]"
+            required: true
+          - name: "limit"
+            type: "number | null"
+            required: true
+
+    - name: "Row"
+      kind: "query_result"
+      source: "packages/cypher/src/evaluator.ts"
+      type: "Record<string, unknown>"
+
+    - name: "GraphAdapter"
+      kind: "service_interface"
+      source: "packages/cypher/src/evaluator.ts"
+      methods:
+          - name: "seeds"
+            params: ["label: string | null"]
+            returns: "Promise<N[]>"
+          - name: "expand"
+            params: ["node: N", "relationshipTypes: string[]"]
+            returns: "Promise<N[]>"
+          - name: "labelOf"
+            params: ["node: N"]
+            returns: "string"
+          - name: "matchesLabel"
+            params: ["node: N", "label: string"]
+            returns: "boolean"
+          - name: "getProperty"
+            params: ["node: N", "property: string"]
+            returns: "Promise<ScalarValue>"
+          - name: "serialize"
+            params: ["node: N"]
+            returns: "Promise<Record<string, unknown>>"
+          - name: "identity"
+            params: ["node: N"]
+            returns: "unknown"
+
+    - name: "PropertyDef"
+      kind: "lom_schema_type"
+      source: "packages/lom-schema/src/types.ts"
+      fields:
+          - name: "name"
+            type: "string"
+            required: true
+          - name: "type"
+            type: "PropertyType"
+            required: true
+          - name: "access"
+            type: "PropertyAccess"
+            required: true
+          - name: "enumValues"
+            type: "string[]"
+            required: false
+          - name: "description"
+            type: "string"
+            required: false
+
+    - name: "NodeLabelDef"
+      kind: "lom_schema_type"
+      source: "packages/lom-schema/src/types.ts"
+      fields:
+          - name: "label"
+            type: "string"
+            required: true
+          - name: "extends"
+            type: "string"
+            required: false
+          - name: "abstract"
+            type: "boolean"
+            required: false
+          - name: "properties"
+            type: "PropertyDef[]"
+            required: true
+          - name: "description"
+            type: "string"
+            required: false
+
+    - name: "RelationshipDef"
+      kind: "lom_schema_type"
+      source: "packages/lom-schema/src/types.ts"
+      fields:
+          - name: "type"
+            type: "string"
+            required: true
+          - name: "from"
+            type: "string"
+            required: true
+          - name: "to"
+            type: "string"
+            required: true
+          - name: "array"
+            type: "boolean"
+            required: true
+          - name: "description"
+            type: "string"
+            required: false
+
+    - name: "LomSchema"
+      kind: "lom_schema_type"
+      source: "packages/lom-schema/src/types.ts"
+      fields:
+          - name: "version"
+            type: "string"
+            required: true
+          - name: "nodes"
+            type: "NodeLabelDef[]"
+            required: true
+          - name: "relationships"
+            type: "RelationshipDef[]"
+            required: true
+
+    - name: "ObjectNode"
+      kind: "adapter_internal_model"
+      source: "apps/extension/src/lom/adapter.ts"
+      fields:
+          - name: "type"
+            type: "\"object\""
+            required: true
+          - name: "label"
+            type: "string"
+            required: true
+          - name: "value"
+            type: "DataModelObject<\"1.0.0\">"
+            required: true
+          - name: "index"
+            type: "number | null"
+            required: true
+
+    - name: "NoteNode"
+      kind: "adapter_internal_model"
+      source: "apps/extension/src/lom/adapter.ts"
+      fields:
+          - name: "type"
+            type: "\"note\""
+            required: true
+          - name: "label"
+            type: "\"Note\""
+            required: true
+          - name: "value"
+            type: "NoteDescription"
+            required: true
+          - name: "index"
+            type: "number"
+            required: true
+
+    - name: "LomNode"
+      kind: "adapter_internal_union"
+      source: "apps/extension/src/lom/adapter.ts"
+      variants:
+          - "ObjectNode"
+          - "NoteNode"
+
+mcp_tools:
+    - name: "schema"
+      source: "apps/extension/src/tools/schema.ts"
+      input: null
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  schema: "LomSchema"
+                  examples: "string[]"
+
+    - name: "get_overview"
+      source: "apps/extension/src/tools/overview.ts"
+      input: null
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  tempo: "number"
+                  scale:
+                      name: "string"
+                      mode: "boolean"
+                      rootNote: "number"
+                  trackCount: "number"
+                  returnTrackCount: "number"
+                  sceneCount: "number"
+                  cuePointCount: "number"
+                  tracks:
+                      type: "array"
+                      item:
+                          index: "number"
+                          name: "string"
+                          kind: "midi | audio | other"
+                          mute: "boolean"
+                          solo: "boolean"
+                          arm: "boolean"
+
+    - name: "query"
+      source: "apps/extension/src/tools/query.ts"
+      input:
+          cypher:
+              type: "string"
+              required: true
+              min_length: 1
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  count: "number"
+                  rows: "Row[]"
+
+    - name: "set_song"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          set:
+              tempo:
+                  type: "number"
+                  required: false
+                  constraints: ["positive"]
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+      selection:
+          fixed_select: "MATCH (s:Song) RETURN s"
+
+    - name: "set_track"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Track を 1 変数で RETURN する Cypher"
+          set:
+              name:
+                  type: "string"
+                  required: false
+              arm:
+                  type: "boolean"
+                  required: false
+              mute:
+                  type: "boolean"
+                  required: false
+              solo:
+                  type: "boolean"
+                  required: false
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+
+    - name: "set_clip"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Clip を 1 変数で RETURN する Cypher"
+          set:
+              name:
+                  type: "string"
+                  required: false
+              color:
+                  type: "number"
+                  required: false
+              muted:
+                  type: "boolean"
+                  required: false
+              looping:
+                  type: "boolean"
+                  required: false
+              warping:
+                  type: "boolean"
+                  required: false
+              warpMode:
+                  type: "warp_mode"
+                  required: false
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+
+    - name: "set_scene"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Scene を 1 変数で RETURN する Cypher"
+          set:
+              name:
+                  type: "string"
+                  required: false
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+
+    - name: "set_device_parameter"
+      source: "apps/extension/src/tools/write.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Parameter を 1 変数で RETURN する Cypher"
+          set:
+              value:
+                  type: "number"
+                  required: true
+          preview:
+              type: "boolean"
+              required: false
+          confirm:
+              type: "boolean"
+              required: false
+
+    - name: "write_notes"
+      source: "apps/extension/src/tools/notes.ts"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "MidiClip を 1 変数で RETURN する Cypher"
+          notes:
+              type: "NoteInput[]"
+              required: true
+          mode:
+              type: "\"replace\""
+              required: false
+              default: "replace"
+          preview:
+              type: "boolean"
+              required: false
+
+tool_support_models:
+    - name: "SetParams"
+      source: "apps/extension/src/tools/write.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "set"
+            type: "Record<string, ScalarValue | undefined>"
+            required: true
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+          - name: "confirm"
+            type: "boolean | undefined"
+            required: true
+    - name: "NoteInput"
+      source: "apps/extension/src/tools/notes.ts"
+      fields:
+          - name: "pitch"
+            type: "number"
+            required: true
+            constraints: ["integer", "0 <= value <= 127"]
+          - name: "startTime"
+            type: "number"
+            required: true
+            constraints: ["value >= 0"]
+          - name: "duration"
+            type: "number"
+            required: true
+            constraints: ["positive"]
+          - name: "velocity"
+            type: "number"
+            required: false
+            constraints: ["0 <= value <= 127"]
+          - name: "muted"
+            type: "boolean"
+            required: false
+          - name: "probability"
+            type: "number"
+            required: false
+            constraints: ["0 <= value <= 1"]
+          - name: "releaseVelocity"
+            type: "number"
+            required: false
+            constraints: ["0 <= value <= 127"]
+          - name: "velocityDeviation"
+            type: "number"
+            required: false
+
+tool_result_shapes:
+    set_tools:
+        statuses:
+            - status: "no_match"
+              fields:
+                  matched: "0"
+            - status: "preview"
+              fields:
+                  matched: "number"
+                  set: "Record<string, ScalarValue>"
+                  targets: "Record<string, unknown>[]"
+            - status: "confirm_required"
+              fields:
+                  matched: "number"
+                  hint: "string"
+            - status: "ok"
+              fields:
+                  modified: "number"
+                  set: "Record<string, ScalarValue>"
+        confirm_threshold: 20
+    write_notes:
+        statuses:
+            - status: "preview"
+              fields:
+                  noteCount: "number"
+            - status: "ok"
+              fields:
+                  noteCount: "number"
+
+lom_graph:
+    source: "packages/lom-schema/src/schema.ts"
+    version: "1.0.0"
+    startable_labels:
+        source: "apps/extension/src/lom/adapter.ts"
+        labels:
+            - "Song"
+            - "Track"
+            - "MidiTrack"
+            - "AudioTrack"
+            - "ReturnTrack"
+            - "MainTrack"
+            - "Clip"
+            - "MidiClip"
+            - "AudioClip"
+            - "Device"
+            - "RackDevice"
+            - "DrumRack"
+            - "Simpler"
+            - "Scene"
+            - "CuePoint"
+    labels:
+        - label: "Song"
+          description: "Live Set のルート。"
+          properties:
+              - { name: "tempo", type: "number", access: "rw" }
+              - { name: "scaleMode", type: "boolean", access: "r" }
+              - { name: "scaleName", type: "string", access: "r" }
+              - { name: "rootNote", type: "number", access: "r", description: "0(C)-11(B)" }
+              - { name: "scaleIntervals", type: "number[]", access: "r" }
+              - { name: "gridQuantization", type: "enum", access: "r", enum: "grid_quantization" }
+              - { name: "gridIsTriplet", type: "boolean", access: "r" }
+        - label: "Track"
+          abstract: true
+          description: "MidiTrack / AudioTrack / ReturnTrack / MainTrack の抽象基底。"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "rw" }
+              - { name: "kind", type: "string", access: "r", description: "midi/audio/return/main" }
+              - { name: "arm", type: "boolean", access: "rw" }
+              - { name: "mute", type: "boolean", access: "rw" }
+              - { name: "solo", type: "boolean", access: "rw" }
+              - { name: "mutedViaSolo", type: "boolean", access: "r" }
+        - label: "MidiTrack"
+          extends: "Track"
+          properties: []
+        - label: "AudioTrack"
+          extends: "Track"
+          properties: []
+        - label: "ReturnTrack"
+          extends: "Track"
+          properties: []
+        - label: "MainTrack"
+          extends: "Track"
+          properties: []
+        - label: "Mixer"
+          description: "トラックのミキサー。volume / panning / sends を Parameter として持つ。"
+          properties: []
+        - label: "Clip"
+          abstract: true
+          description: "MidiClip / AudioClip の抽象基底。"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "rw" }
+              - { name: "color", type: "number", access: "rw" }
+              - { name: "muted", type: "boolean", access: "rw" }
+              - { name: "looping", type: "boolean", access: "rw" }
+              - { name: "loopStart", type: "number", access: "r" }
+              - { name: "loopEnd", type: "number", access: "r" }
+              - { name: "startMarker", type: "number", access: "r" }
+              - { name: "endMarker", type: "number", access: "r" }
+              - { name: "startTime", type: "number", access: "r" }
+              - { name: "endTime", type: "number", access: "r" }
+              - { name: "duration", type: "number", access: "r" }
+        - label: "MidiClip"
+          extends: "Clip"
+          properties: []
+        - label: "AudioClip"
+          extends: "Clip"
+          properties:
+              - { name: "filePath", type: "string", access: "r" }
+              - { name: "warping", type: "boolean", access: "rw" }
+              - { name: "warpMode", type: "enum", access: "rw", enum: "warp_mode" }
+        - label: "ClipSlot"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "hasClip", type: "boolean", access: "r" }
+        - label: "Scene"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "rw" }
+              - { name: "tempo", type: "number", access: "r" }
+              - { name: "signatureNumerator", type: "number", access: "r" }
+              - { name: "signatureDenominator", type: "number", access: "r" }
+        - label: "Device"
+          abstract: true
+          description: "RackDevice / DrumRack / Simpler を含む抽象基底。"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "r" }
+        - label: "RackDevice"
+          extends: "Device"
+          properties: []
+        - label: "DrumRack"
+          extends: "Device"
+          properties: []
+        - label: "Simpler"
+          extends: "Device"
+          properties: []
+        - label: "Parameter"
+          description: "デバイス／ミキサーのパラメータ。"
+          properties:
+              - { name: "name", type: "string", access: "r" }
+              - { name: "value", type: "number", access: "rw" }
+              - { name: "min", type: "number", access: "r" }
+              - { name: "max", type: "number", access: "r" }
+              - { name: "defaultValue", type: "number", access: "r" }
+              - { name: "isQuantized", type: "boolean", access: "r" }
+              - { name: "valueItems", type: "string[]", access: "r" }
+        - label: "Chain"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+        - label: "DrumChain"
+          extends: "Chain"
+          properties: []
+        - label: "Note"
+          description: "MidiClip 内の MIDI ノート。読みは query、書きは write_notes で扱う。"
+          properties:
+              - { name: "pitch", type: "number", access: "rw" }
+              - { name: "startTime", type: "number", access: "rw" }
+              - { name: "duration", type: "number", access: "rw" }
+              - { name: "velocity", type: "number", access: "rw" }
+              - { name: "muted", type: "boolean", access: "rw" }
+              - { name: "probability", type: "number", access: "rw" }
+              - { name: "releaseVelocity", type: "number", access: "rw" }
+              - { name: "velocityDeviation", type: "number", access: "rw" }
+              - { name: "selected", type: "boolean", access: "rw" }
+        - label: "CuePoint"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "time", type: "number", access: "r" }
+        - label: "TakeLane"
+          properties:
+              - { name: "index", type: "number", access: "r" }
+              - { name: "name", type: "string", access: "rw" }
+    relationships:
+        - { type: "HAS_TRACK", from: "Song", to: "Track", array: true }
+        - { type: "HAS_RETURN", from: "Song", to: "ReturnTrack", array: true }
+        - { type: "HAS_MAIN", from: "Song", to: "MainTrack", array: false }
+        - { type: "HAS_SCENE", from: "Song", to: "Scene", array: true }
+        - { type: "HAS_CUE", from: "Song", to: "CuePoint", array: true }
+        - { type: "HAS_MIXER", from: "Track", to: "Mixer", array: false }
+        - { type: "HAS_VOLUME", from: "Mixer", to: "Parameter", array: false }
+        - { type: "HAS_PAN", from: "Mixer", to: "Parameter", array: false }
+        - { type: "HAS_SEND", from: "Mixer", to: "Parameter", array: true }
+        - { type: "HAS_DEVICE", from: "Track", to: "Device", array: true }
+        - { type: "HAS_CLIPSLOT", from: "Track", to: "ClipSlot", array: true }
+        - { type: "HAS_CLIP", from: "ClipSlot", to: "Clip", array: false }
+        - { type: "HAS_ARRANGEMENT_CLIP", from: "Track", to: "Clip", array: true }
+        - { type: "HAS_TAKELANE", from: "Track", to: "TakeLane", array: true }
+        - { type: "HAS_PARAM", from: "Device", to: "Parameter", array: true }
+        - { type: "HAS_CHAIN", from: "RackDevice", to: "Chain", array: true }
+        - { type: "HAS_NOTE", from: "MidiClip", to: "Note", array: true }
+
+cypher_contract:
+    grammar_summary:
+        query: "MATCH <pattern> [WHERE <expr>] RETURN <items> [LIMIT <integer>]"
+        pattern: "(node)-[:REL|OTHER*min..max]->(node)"
+        node: "(variable?:Label? { property: scalar, ... }?)"
+    default_max_hops_when_omitted: 8
+    read_return_contract:
+        tool: "query"
+        allowed:
+            - "RETURN *"
+            - "RETURN node_variable"
+            - "RETURN node_variable.property"
+            - "comma-separated combinations"
+    write_select_return_contract:
+        tools:
+            - "set_track"
+            - "set_clip"
+            - "set_scene"
+            - "set_device_parameter"
+            - "write_notes"
+        required: "RETURN exactly one node variable"
+        example: "MATCH (t:Track {name:\"Drums\"}) RETURN t"
+
+error_models:
+    classes:
+        - name: "AppError"
+          status_source: "constructor args"
+          type_source: "constructor args or about:blank"
+        - name: "ConfigError"
+          status: 500
+          type: "https://live-connector.philtz.dev/errors/config"
+        - name: "AuthError"
+          status: 401
+          type: "https://live-connector.philtz.dev/errors/unauthorized"
+        - name: "BadRequestError"
+          status: 400
+          type: "https://live-connector.philtz.dev/errors/bad-request"
+        - name: "NotFoundError"
+          status: 404
+          type: "https://live-connector.philtz.dev/errors/not-found"
+    normalization:
+        function: "toProblemDetails"
+        app_error: "AppError.toProblemDetails(instance)"
+        unknown_error:
+            type: "about:blank"
+            title: "Internal Server Error"
+            status: 500
+
+examples:
+    cypher:
+        source: "packages/lom-schema/src/schema.ts"
+        values:
+            - "MATCH (t:Track) RETURN t.index, t.name, t.kind, t.mute, t.arm"
+            - "MATCH (:Track {name:\"Drums\"})-[:HAS_DEVICE]->(:Device {name:\"Operator\"})-[:HAS_PARAM]->(p:Parameter {name:\"Cutoff\"}) RETURN p.value, p.min, p.max"
+            - "MATCH (t:MidiTrack {mute:true})-[:HAS_CLIPSLOT]->(:ClipSlot)-[:HAS_CLIP]->(c:Clip) RETURN t.name, c.index, c.name"
+            - "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n"
