@@ -321,7 +321,199 @@ async function runDeleteCuePointTool(
     }
 }
 
-/** アレンジメントクリップ作成/削除とロケーター作成/削除ツールを登録する。 */
+type MoveClipParams = {
+    select: string
+    startTime: number
+    overwrite: boolean | undefined
+    confirm: boolean | undefined
+    preview: boolean | undefined
+}
+
+const FLOAT_EPS = 1e-6
+
+/** 再作成で失われる属性（再現不能属性）を列挙する。 */
+function lossyAttributes(clip: Clip<TargetApiVersion>): string[] {
+    const lossy: string[] = []
+    const duration = clip.duration
+    if (clip instanceof MidiClip) {
+        const custom_markers =
+            Math.abs(clip.startMarker) > FLOAT_EPS ||
+            Math.abs(clip.endMarker - duration) > FLOAT_EPS ||
+            Math.abs(clip.loopStart) > FLOAT_EPS ||
+            Math.abs(clip.loopEnd - duration) > FLOAT_EPS
+        if (custom_markers) {
+            lossy.push(
+                "MIDI clip start/end markers and loop bounds (createMidiClip accepts only startTime and duration)",
+            )
+        }
+    } else if (clip instanceof AudioClip) {
+        if (clip.warping && clip.warpMarkers.length > 2) {
+            lossy.push("custom warp markers (the warp grid)")
+        }
+    }
+    return lossy
+}
+
+/**
+ * 移動前にクリップの再現可能状態を取得し、任意 startTime に同等クリップを再作成する関数を返す。
+ * MidiClip は MidiTrack、AudioClip は AudioTrack でのみ対応する。
+ */
+function buildRecreate(
+    clip: Clip<TargetApiVersion>,
+    track: Track<TargetApiVersion>,
+    duration: number,
+): (start: number) => Promise<Clip<TargetApiVersion>> {
+    const name = clip.name
+    const color = clip.color
+    const muted = clip.muted
+    const looping = clip.looping
+
+    if (clip instanceof MidiClip && track instanceof MidiTrack) {
+        const notes = clip.notes
+        const midi_track = track
+        return async (start) => {
+            const created = await midi_track.createMidiClip(start, duration)
+            created.notes = notes
+            created.name = name
+            created.color = color
+            created.muted = muted
+            created.looping = looping
+            return created
+        }
+    }
+
+    if (clip instanceof AudioClip && track instanceof AudioTrack) {
+        const file_path = clip.filePath
+        const warping = clip.warping
+        const warp_mode = clip.warpMode
+        const loop_settings: ClipLoopSettings = {
+            looping,
+            startMarker: clip.startMarker,
+            endMarker: clip.endMarker,
+            loopStart: clip.loopStart,
+            loopEnd: clip.loopEnd,
+        }
+        const audio_track = track
+        return async (start) => {
+            const created = await audio_track.createAudioClip({
+                filePath: file_path,
+                startTime: start,
+                duration,
+                isWarped: warping,
+                loopSettings: loop_settings,
+            })
+            created.warpMode = warp_mode
+            created.name = name
+            created.color = color
+            created.muted = muted
+            return created
+        }
+    }
+
+    throw new BadRequestError(
+        "move_clip supports MidiClip on MidiTrack and AudioClip on AudioTrack only",
+        { hint: "Select an arrangement MidiClip or AudioClip via HAS_ARRANGEMENT_CLIP." },
+    )
+}
+
+async function runMoveClipTool(deps: ServerDeps, params: MoveClipParams): Promise<ToolResult> {
+    try {
+        const adapter = new LomGraphAdapter(deps.context)
+        const { clip, track } = resolveArrangementClip(
+            await selectNodes(parseQuery(params.select), adapter),
+        )
+
+        const old_start = clip.startTime
+        const duration = clip.duration
+        const new_start = params.startTime
+        const target_end = new_start + duration
+
+        const before_index = track.arrangementClips.findIndex((c) => c.handle === clip.handle)
+        const clip_before = clipSummary(clip, before_index < 0 ? null : before_index)
+
+        if (Math.abs(new_start - old_start) < FLOAT_EPS) {
+            return textResult({ status: "noop", reason: "startTime unchanged", clip: clip_before })
+        }
+
+        const lossy = lossyAttributes(clip)
+        const others = track.arrangementClips.filter(
+            (c) =>
+                c.handle !== clip.handle &&
+                c.startTime < target_end - FLOAT_EPS &&
+                c.endTime > new_start + FLOAT_EPS,
+        )
+
+        if (others.length > 0 && params.overwrite !== true) {
+            throw new BadRequestError(
+                `target range [${new_start}, ${target_end}) overlaps ${others.length} other clip(s)`,
+                {
+                    hint: "Pass overwrite:true to clear the target range, or choose a free startTime.",
+                },
+            )
+        }
+
+        const plan = {
+            clip: clip_before,
+            target: { startTime: new_start, endTime: target_end },
+            wouldDropAttributes: lossy,
+            wouldClearClips: others.length,
+        }
+
+        if (params.preview === true) {
+            return textResult({ status: "preview", ...plan })
+        }
+        if ((lossy.length > 0 || others.length > 0) && params.confirm !== true) {
+            return textResult({
+                status: "confirm_required",
+                ...plan,
+                hint: "Destructive or lossy move. Pass confirm:true to proceed.",
+            })
+        }
+
+        // 退避状態をキャプチャ（削除前に実行）
+        const recreate = buildRecreate(clip, track, duration)
+        const self_overlap = Math.abs(new_start - old_start) < duration - FLOAT_EPS
+
+        let created: Clip<TargetApiVersion>
+        if (!self_overlap) {
+            // create-first: 失敗しても元クリップは無傷
+            if (others.length > 0) {
+                await track.clearClipsInRange(new_start, target_end)
+            }
+            created = await recreate(new_start)
+            await track.deleteClip(clip)
+        } else {
+            // 自己重なり: 旧削除 → 新作成。失敗時は元位置へ復元（補償）
+            await track.deleteClip(clip)
+            if (others.length > 0) {
+                await track.clearClipsInRange(new_start, target_end)
+            }
+            try {
+                created = await recreate(new_start)
+            } catch (createError) {
+                await recreate(old_start)
+                throw new BadRequestError(
+                    `move failed during recreate; original clip restored at startTime ${old_start}`,
+                    { hint: String(createError) },
+                )
+            }
+        }
+
+        const after_index = track.arrangementClips.findIndex((c) => c.handle === created.handle)
+        return textResult({
+            status: "ok",
+            movedTo: { startTime: new_start, endTime: target_end },
+            droppedAttributes: lossy,
+            clearedClips: others.length,
+            clip: clipSummary(created, after_index < 0 ? null : after_index),
+        })
+    } catch (error) {
+        deps.log.error("move_clip failed", { error: String(error) })
+        return textResult(toMcpError(error), true)
+    }
+}
+
+/** アレンジメントクリップ作成/削除/移動とロケーター作成/削除ツールを登録する。 */
 export function registerArrangementTools(server: McpServer, deps: ServerDeps): void {
     server.registerTool(
         "create_arrangement_clip",
@@ -374,6 +566,24 @@ export function registerArrangementTools(server: McpServer, deps: ServerDeps): v
             },
         },
         async ({ select, preview }) => runDeleteArrangementClipTool(deps, { select, preview }),
+    )
+
+    server.registerTool(
+        "move_clip",
+        {
+            title: "アレンジメント Clip 移動",
+            description:
+                "select で選んだ 1 つのアレンジメント Clip を startTime（beats）へ移動する。SDK に移動 API が無いため、状態退避→削除→再作成→再適用で実現する（失敗時は元位置へ復元）。再現不能属性（Audio のカスタム warp グリッド、MIDI のカスタム marker/loop）を持つ場合や移動先に他クリップがある場合は confirm 必須。他クリップと重なる場合は overwrite:true で範囲を空ける。Session Clip は対象外。",
+            inputSchema: {
+                select: z.string().min(1).describe(clipSelectDescription()),
+                startTime: z.number().min(0),
+                overwrite: z.boolean().optional(),
+                confirm: z.boolean().optional(),
+                preview: z.boolean().optional(),
+            },
+        },
+        async ({ select, startTime, overwrite, confirm, preview }) =>
+            runMoveClipTool(deps, { select, startTime, overwrite, confirm, preview }),
     )
 
     server.registerTool(
