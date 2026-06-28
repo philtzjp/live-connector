@@ -20,6 +20,7 @@ export type McpErrorMetadata = {
     validProperties?: string[]
     validRelationships?: string[]
     validStartLabels?: string[]
+    validDeviceNames?: string[]
 }
 
 export type McpError = {
@@ -29,6 +30,7 @@ export type McpError = {
     validProperties?: string[]
     validRelationships?: string[]
     validStartLabels?: string[]
+    validDeviceNames?: string[]
 }
 
 export type AppErrorArgs = {
@@ -165,6 +167,9 @@ function appendMcpMetadata(target: McpError, metadata: McpErrorMetadata | undefi
     }
     if (metadata?.validStartLabels !== undefined) {
         target.validStartLabels = metadata.validStartLabels
+    }
+    if (metadata?.validDeviceNames !== undefined) {
+        target.validDeviceNames = metadata.validDeviceNames
     }
     return target
 }
