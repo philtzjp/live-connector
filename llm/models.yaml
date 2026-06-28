@@ -22,6 +22,7 @@ source_files:
         - "apps/extension/src/tools/audio.ts"
         - "apps/extension/src/tools/arrangement.ts"
         - "apps/extension/src/tools/create.ts"
+        - "apps/extension/src/tools/devices.ts"
         - "apps/extension/src/tools/presets.ts"
         - "apps/extension/src/tools/write.ts"
         - "apps/extension/src/tools/notes.ts"
@@ -271,6 +272,9 @@ models:
           - name: "validStartLabels"
             type: "string[]"
             required: false
+          - name: "validDeviceNames"
+            type: "string[]"
+            required: false
 
     - name: "McpError"
       kind: "mcp_error_response"
@@ -293,6 +297,9 @@ models:
             type: "string[]"
             required: false
           - name: "validStartLabels"
+            type: "string[]"
+            required: false
+          - name: "validDeviceNames"
             type: "string[]"
             required: false
 
@@ -1068,6 +1075,42 @@ mcp_tools:
                           endTime: "number"
                           noteCount: "number"
 
+    - name: "insert_device"
+      source: "apps/extension/src/tools/devices.ts"
+      note: "Track.insertDevice で内蔵 Live デバイスを挿入する。内蔵デバイスのデフォルトプリセットのみ対応し、サードパーティプラグインや .adv/.adg などのプリセットファイルは挿入できない。SDK にデバイス列挙 API が無いため、失敗時に内蔵デバイス名カタログを validDeviceNames として返す。"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Track を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
+          deviceName:
+              type: "string"
+              required: true
+              note: "内蔵 Live デバイスの表示名（例: Operator, Reverb, Auto Filter）。"
+          index:
+              type: "number"
+              required: false
+              constraints: ["integer", "value >= 0", "value <= track.devices.length"]
+              note: "挿入位置（0 始まり）。省略時はデバイスチェーンの末尾に追加する。"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  track: "Record<string, unknown>"
+                  deviceName: "string"
+                  index: "number"
+                  device:
+                      optional: true
+                      shape:
+                          _label: "\"Device\" | \"RackDevice\" | \"DrumRack\" | \"Simpler\""
+                          name: "string"
+                          index: "number"
+                          parameterCount: "number"
+
     - name: "set_song"
       source: "apps/extension/src/tools/write.ts"
       input:
@@ -1310,6 +1353,22 @@ tool_support_models:
             type: "number"
             required: true
             constraints: ["positive"]
+          - name: "preview"
+            type: "boolean | undefined"
+            required: true
+    - name: "InsertDeviceParams"
+      source: "apps/extension/src/tools/devices.ts"
+      fields:
+          - name: "select"
+            type: "string"
+            required: true
+          - name: "deviceName"
+            type: "string"
+            required: true
+          - name: "index"
+            type: "number | undefined"
+            required: true
+            constraints: ["integer", "value >= 0", "value <= track.devices.length"]
           - name: "preview"
             type: "boolean | undefined"
             required: true
@@ -1938,6 +1997,7 @@ cypher_contract:
         source: "packages/lom-schema/src/schema.ts#query_contract"
         tools:
             - "create_clip"
+            - "insert_device"
             - "create_arrangement_clip"
             - "delete_arrangement_clip"
             - "delete_cue_point"
