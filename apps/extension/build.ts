@@ -5,13 +5,25 @@ import type { ExtensionManifest } from "./src/types/manifest"
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8")) as ExtensionManifest
 const production = process.argv.includes("--production")
 
-// Node 組み込みから取れる Web グローバルは、どのモジュール初期化よりも先に必要なため
-// バンドル先頭（banner）で require 経由で補う（inject では順序が間に合わない場合がある）。
-// SDK の StreamableHTTPServerTransport は内部の Node HTTP 変換層で Request/Response などを参照する。
+// Extension Host の VM コンテキストには AbortSignal などの Web globals が存在しない。
+// ただし Host 外側の Node ランタイムには存在するため、どのモジュール初期化よりも先に
+// banner で外側の globalThis からコピーする（inject では undici 読み込み順に間に合わない）。
 const globalsBanner = `(function(){
   var g = globalThis;
   function set(n, v){ if (g[n] === undefined && v !== undefined) g[n] = v; }
   function tryReq(m){ try { return require(m); } catch (e) { return undefined; } }
+  var vm = tryReq("node:vm");
+  function hostGlobal(n){
+    if (!vm || typeof vm.runInThisContext !== "function") return undefined;
+    try { return vm.runInThisContext("globalThis[" + JSON.stringify(n) + "]"); } catch (e) { return undefined; }
+  }
+  [
+    "AbortController","AbortSignal","Blob","DOMException","Event","EventTarget","File","FormData",
+    "Headers","MessageChannel","MessagePort","ReadableStream","Request","Response","TextDecoder",
+    "TextEncoder","TransformStream","URL","URLSearchParams","WebSocket","WritableStream",
+    "ByteLengthQueuingStrategy","CountQueuingStrategy","crypto","fetch","performance","queueMicrotask",
+    "structuredClone"
+  ].forEach(function(k){ set(k, hostGlobal(k)); });
   var util = require("node:util");
   set("TextEncoder", util.TextEncoder); set("TextDecoder", util.TextDecoder);
   var url = require("node:url");
