@@ -12,7 +12,7 @@ import { registerWriteTools } from "../tools/write"
 
 /** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
 export function createMcpServer(deps: ServerDeps): McpServer {
-    const server = new McpServer({ name: "live-connector", version: "2.0.0" })
+    const server = new McpServer({ name: "live-connector", version: "2.0.1" })
     registerSchemaTool(server, deps)
     registerOverviewTool(server, deps)
     registerQueryTool(server, deps)
