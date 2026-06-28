@@ -36,7 +36,6 @@ const BUILT_IN_DEVICE_CATALOG = {
         "Simpler",
         "Drum Rack",
         "Impulse",
-        "Bass",
         "Poli",
     ],
     audioEffects: [
