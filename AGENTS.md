@@ -29,6 +29,18 @@
 5. MUST: 常に日本語で回答する
 6. IF: サービスのバージョン変更が必要と判断された; THEN MUST: セマンティックバージョニングに基づいて `VERSION` を更新し、`llm/version/${version}.md` を作成する
 7. IF: アーキテクチャが変更された; THEN MUST: `./llm/ARCHITECTURE.md` の Mermaid ダイアグラムを更新する
+8. MUST: GitHub Issue 本体・コメント、PR 本文・コメントを書く・更新するとき、先頭行に書き手のエージェント署名を `✳︎ <会社名> <モデル名> <バージョン>` 形式で入れ、次に空行を1行挟んで本文を続ける; MUST: モデル名にバージョン番号が含まれる場合（例: `GPT-5.5`）は `<バージョン>` を省略する; MUST: 署名は U+2733 EIGHT SPOKED ASTERISK (`✳︎`) で始める; NEVER: 署名を本文の途中・末尾に置く、署名行と本文の間の空行を省略する、署名行に日時・ID・装飾などの追加情報を含める
+
+## 署名早見表
+| エージェント | 署名 |
+| --- | --- |
+| Anthropic Claude Opus 4.8 | `✳︎ Anthropic Claude Opus 4.8` |
+| Anthropic Claude Opus 4.7 | `✳︎ Anthropic Claude Opus 4.7` |
+| Anthropic Claude Sonnet 4.6 | `✳︎ Anthropic Claude Sonnet 4.6` |
+| Anthropic Claude Haiku 4.5 | `✳︎ Anthropic Claude Haiku 4.5` |
+| Anthropic Claude Fable 5 | `✳︎ Anthropic Claude Fable 5` |
+| OpenAI GPT-5.5 | `✳︎ OpenAI GPT-5.5` |
+| OpenAI GPT-5.2-Codex | `✳︎ OpenAI GPT-5.2-Codex` |
 
 # スキル
 場面依存のルールは `.agents/skills/<name>/SKILL.md` に正本を置き、`.claude/skills/<name>` から相対シンボリックリンクで参照する。Claude Code は frontmatter の `description` を見て該当作業時のみ自動ロードする; 他エージェントは `.agents/skills/` 配下のファイルを直接参照すること。
@@ -42,4 +54,3 @@
 | `api-design` | API エンドポイント・MCP サーバーの設計/実装/変更時（HTTP ハンドラ、OpenAPI スキーマ、ルーティング、MCP トランスポート、認証方式の追加など） |
 | `commit-and-git` | コミット、プッシュ、ブランチ作成/切替/削除、マージ、リベース、`gh pr merge` などあらゆる Git / GitHub 操作時 |
 | `issue-branch-pr-flow` | パッチバグフィクス以外の実装作業時。Issue 起票 → 専用ブランチ → 実装 → PR → 同期確認 → マージの標準フロー |
-| `issue-model-signature` | GitHub Issue 本体・コメント、PR 本文・コメントを書く/更新する時。先頭に `✳︎ <会社名> <モデル名> <バージョン>` 署名行を入れる |
