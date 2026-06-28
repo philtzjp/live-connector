@@ -11,12 +11,12 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 ## 必要なもの
 
 - Ableton Live（Extensions 対応の Beta ビルド）
-- [live-connector v2.0.1](https://github.com/philtzjp/live-connector/releases/tag/v2.0.1) の `.ablx`
+- [live-connector v2.1.0](https://github.com/philtzjp/live-connector/releases/tag/v2.1.0) の `.ablx`
 - Claude Code などの HTTP MCP クライアント
 
 ## インストール
 
-1. [`live-connector-2.0.1.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.0.1/live-connector-2.0.1.ablx) をダウンロードします。
+1. [`live-connector-2.1.0.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.1.0/live-connector-2.1.0.ablx) をダウンロードします。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -31,7 +31,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"2.0.1","description":"live-connector MCP server"}
+{"status":"pass","version":"2.1.0","description":"live-connector MCP server"}
 ```
 
 ## Claude Code で使う
@@ -51,6 +51,7 @@ claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp 
 - Cypher サブセットによる読み取り: `query`
 - トラック、クリップ、シーン、デバイスパラメータ、Cue Point の更新
 - Session / Arrangement クリップの作成と削除
+- 内蔵デバイス（音源・エフェクト）の挿入: `insert_device`
 - MIDI ノートの書き込み
 - Arrangement 範囲のオーディオ書き出し
 - デバイス状態の保存と再適用
