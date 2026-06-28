@@ -3,6 +3,7 @@ import type { ServerDeps } from "../deps"
 import { registerArrangementTools } from "../tools/arrangement"
 import { registerAudioTools } from "../tools/audio"
 import { registerCreateTools } from "../tools/create"
+import { registerDeviceTools } from "../tools/devices"
 import { registerNotesTool } from "../tools/notes"
 import { registerOverviewTool } from "../tools/overview"
 import { registerPresetTools } from "../tools/presets"
@@ -19,6 +20,7 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     registerAudioTools(server, deps)
     registerArrangementTools(server, deps)
     registerCreateTools(server, deps)
+    registerDeviceTools(server, deps)
     registerPresetTools(server, deps)
     registerWriteTools(server, deps)
     registerNotesTool(server, deps)
