@@ -75,4 +75,4 @@ RETURN p.value, p.min, p.max
 
 本リポジトリの自作コード・ドキュメント・アセットは [MIT](./LICENSE) です。
 
-Ableton Extensions SDK は Ableton AG の第三者コンポーネントであり、本リポジトリには同梱していません。詳細は [LICENSE](./LICENSE) の Third-Party Components を参照してください。
+Ableton Extensions SDK は Ableton AG の第三者コンポーネントであり、本リポジトリには同梱していません。詳細は [NOTICE](./NOTICE) を参照してください。

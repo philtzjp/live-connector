@@ -1,0 +1,16 @@
+Third-Party Components
+
+The MIT License in the LICENSE file applies only to the original source code,
+documentation, and assets created in this repository.
+
+It does NOT apply to the Ableton Extensions SDK ("Extensions SDK"), which is the
+property of Ableton AG and is licensed solely under the Ableton Extensions SDK
+License. The Extensions SDK (the `ableton-sdk/` directory, including its
+packages, generated API reference, rendered documentation, and examples) is a
+third-party component that is NOT distributed with this repository: it is
+excluded via `.gitignore` and must be obtained directly from Ableton.
+
+Nothing in this repository grants any license to the Extensions SDK, nor may
+the Extensions SDK be relicensed under the MIT terms in the LICENSE file. Use of
+the Extensions SDK is governed exclusively by the Ableton Extensions SDK License
+that accompanies it.
