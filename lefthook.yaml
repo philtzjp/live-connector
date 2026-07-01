@@ -1,3 +1,10 @@
+pre-push:
+  commands:
+    typecheck:
+      run: pnpm typecheck
+    test:
+      run: pnpm test
+
 pre-commit:
   commands:
     dotenv-encrypted-check:
