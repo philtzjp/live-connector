@@ -158,6 +158,7 @@ sequenceDiagram
 | `create_cue_point` | write | time 指定で CuePoint を作成し、任意で `name` を設定する |
 | `delete_cue_point` | write | 1 つの CuePoint を削除する |
 | `create_clip` | write | 空の ClipSlot にセッションクリップを生成する（MidiTrack は length で空 MidiClip、AudioTrack は audioFilePath で AudioClip） |
+| `create_track` | write | MIDI / Audio トラックを生成する（SDK 制約で挿入位置は末尾／選択直後） |
 | `create_scene` | write | index 指定で空の Scene を作成する |
 | `delete_scene` | write | 1 つの Scene を削除する（confirm 必須） |
 | `duplicate_scene` | write | 1 つの Scene を複製する |
