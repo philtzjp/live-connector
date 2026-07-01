@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.15.0"
+            value: "2.16.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.15.0"
+            value: "2.16.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.15.0"
+            value: "2.16.0"
           - name: "description"
             type: "string"
             required: true
@@ -1287,6 +1287,11 @@ mcp_tools:
       source: "apps/extension/src/tools/structure.ts"
       note: "SDK の構造操作をツール化。破壊操作（delete_*）は preview で対象確認、confirm:true で実行（guardDestructive）。"
       tools:
+          create_track:
+              input: "kind: \"midi\"|\"audio\", name?: string, preview?: boolean"
+              sdk: "Song.createMidiTrack() / Song.createAudioTrack()（index 引数なし）"
+              note: "SDK は挿入位置を指定できず、最後に選択されたトラックの直後（未選択なら末尾）に生成。生成後 Track.name で命名。"
+              output: "status:ok + track{ index, name, kind }"
           create_scene:
               input: "index?: number>=0, name?: string, preview?: boolean"
               sdk: "Song.createScene(index)"
@@ -1960,7 +1965,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.15.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.16.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
