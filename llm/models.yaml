@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.2.0"
+            value: "2.3.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.2.0"
+            value: "2.3.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.2.0"
+            value: "2.3.0"
           - name: "description"
             type: "string"
             required: true
@@ -497,6 +497,44 @@ models:
           - "{ kind: \"all\" }"
           - "{ kind: \"variable\"; variable: string }"
           - "{ kind: \"property\"; variable: string; property: string }"
+          - "AggregateItem"
+
+    - name: "AggregateItem"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "kind"
+            type: "\"aggregate\""
+            required: true
+          - name: "func"
+            type: "\"count\" | \"min\" | \"max\" | \"avg\" | \"sum\""
+            required: true
+          - name: "arg"
+            type: "AggregateArg"
+            required: true
+          - name: "alias"
+            type: "string"
+            required: true
+            note: "RETURN 行キー・ORDER BY 参照に使う正規化表記（count(n) 等）。"
+
+    - name: "AggregateArg"
+      kind: "cypher_ast_union"
+      source: "packages/cypher/src/ast.ts"
+      variants:
+          - "{ kind: \"star\" }"
+          - "{ kind: \"variable\"; variable: string }"
+          - "{ kind: \"property\"; variable: string; property: string }"
+
+    - name: "OrderItem"
+      kind: "cypher_ast"
+      source: "packages/cypher/src/ast.ts"
+      fields:
+          - name: "key"
+            type: "OrderKey (variable | property | AggregateItem)"
+            required: true
+          - name: "direction"
+            type: "\"ASC\" | \"DESC\""
+            required: true
 
     - name: "Query"
       kind: "cypher_ast"
@@ -508,8 +546,17 @@ models:
           - name: "where"
             type: "WhereExpr | null"
             required: true
+          - name: "distinct"
+            type: "boolean"
+            required: true
           - name: "returns"
             type: "ReturnItem[]"
+            required: true
+          - name: "orderBy"
+            type: "OrderItem[]"
+            required: true
+          - name: "skip"
+            type: "number | null"
             required: true
           - name: "limit"
             type: "number | null"
@@ -1683,7 +1730,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.2.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.3.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
@@ -1987,9 +2034,10 @@ lom_graph:
 
 cypher_contract:
     grammar_summary:
-        query: "MATCH <pattern> [WHERE <expr>] RETURN <items> [LIMIT <integer>]"
+        query: "MATCH <pattern> [WHERE <expr>] RETURN [DISTINCT] <items> [ORDER BY <expr> [ASC|DESC], ...] [SKIP <integer>] [LIMIT <integer>]"
         pattern: "(node)-[:REL|OTHER*min..max]->(node)"
         node: "(variable?:Label? { property: scalar, ... }?)"
+        aggregates: "count(*) / count(var) / count(var.prop) / min|max|avg|sum(var.prop)。非集計項目で暗黙グルーピング。"
     default_max_hops_when_omitted: 8
     start_labels:
         source: "packages/lom-schema/src/schema.ts#startable_labels"
@@ -2017,6 +2065,11 @@ cypher_contract:
             - "RETURN node_variable"
             - "RETURN node_variable.property"
             - "comma-separated combinations"
+            - "RETURN DISTINCT <items>"
+            - "count(*) / count(var) / count(var.prop) / min|max|avg|sum(var.prop)"
+            - "ORDER BY <var.prop | aggregate> [ASC|DESC], ..."
+            - "SKIP <integer> LIMIT <integer>"
+        aggregation_note: "集計関数と非集計項目を混在させると、非集計項目をキーに暗黙グルーピングする。sum は空集合で 0、min/max/avg は空集合で null。"
     write_select_return_contract:
         source: "packages/lom-schema/src/schema.ts#query_contract"
         tools:
@@ -2098,3 +2151,5 @@ examples:
             - "MATCH (:Track {name:\"Drums\"})-[:HAS_DEVICE]->(:Device {name:\"Operator\"})-[:HAS_PARAM]->(p:Parameter {name:\"Cutoff\"}) RETURN p.value, p.min, p.max"
             - "MATCH (t:MidiTrack {mute:true})-[:HAS_CLIPSLOT]->(:ClipSlot)-[:HAS_CLIP]->(c:Clip) RETURN t.name, c.index, c.name"
             - "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n"
+            - "MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN c.name, count(n), max(n.pitch) ORDER BY count(n) DESC"
+            - "MATCH (t:Track)-[:HAS_ARRANGEMENT_CLIP]->(c:Clip) RETURN c.name, c.startTime ORDER BY c.startTime SKIP 0 LIMIT 20"
