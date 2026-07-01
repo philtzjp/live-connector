@@ -1,4 +1,12 @@
-import { ClipSlot, type MidiClip, MidiTrack, type Track } from "@ableton-extensions/sdk"
+import {
+    AudioClip,
+    AudioTrack,
+    type Clip,
+    ClipSlot,
+    MidiClip,
+    MidiTrack,
+    type Track,
+} from "@ableton-extensions/sdk"
 import { parseQuery, selectNodes } from "@live-connector/cypher"
 import { BadRequestError, toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
@@ -6,11 +14,13 @@ import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
 
+type V = TargetApiVersion
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
 type CreateClipParams = {
     select: string
-    length: number
+    length: number | undefined
+    audioFilePath: string | undefined
     preview: boolean | undefined
 }
 
@@ -34,23 +44,23 @@ function resolveSingleClipSlot(nodes: LomNode[]): LomNode {
     const node = nodes[0]
     if (node === undefined || node.type !== "object" || !(node.value instanceof ClipSlot)) {
         throw new BadRequestError("select must return a ClipSlot", {
-            hint: "Use a select query that starts from MidiTrack and returns a ClipSlot node.",
+            hint: "Use a select query that starts from a Track and returns a ClipSlot node.",
         })
     }
     return node
 }
 
-function resolveMidiTrack(slot: ClipSlot<TargetApiVersion>): MidiTrack<TargetApiVersion> {
+function resolveClipTrack(slot: ClipSlot<V>): MidiTrack<V> | AudioTrack<V> {
     const parent = slot.parent
-    if (!(parent instanceof MidiTrack)) {
-        throw new BadRequestError("create_clip requires a ClipSlot on a MidiTrack", {
-            hint: "Select a ClipSlot reached from a MidiTrack. AudioTrack slots cannot create empty MidiClip instances.",
-        })
+    if (parent instanceof MidiTrack || parent instanceof AudioTrack) {
+        return parent
     }
-    return parent
+    throw new BadRequestError("create_clip requires a ClipSlot on a MidiTrack or AudioTrack", {
+        hint: "Select a ClipSlot reached from a MidiTrack (empty MidiClip) or an AudioTrack (audio clip with audioFilePath).",
+    })
 }
 
-function trackIndex(tracks: Track<TargetApiVersion>[], track: MidiTrack<TargetApiVersion>): number {
+function trackIndex(tracks: Track<V>[], track: Track<V>): number {
     const index = tracks.findIndex((candidate) => candidate.handle === track.handle)
     if (index < 0) {
         throw new BadRequestError("selected ClipSlot parent track is not in Song.tracks")
@@ -58,41 +68,73 @@ function trackIndex(tracks: Track<TargetApiVersion>[], track: MidiTrack<TargetAp
     return index
 }
 
-function clipSummary(clip: MidiClip<TargetApiVersion>): Record<string, unknown> {
+function clipSummary(clip: Clip<V>): Record<string, unknown> {
     return {
-        _label: "MidiClip",
+        _label:
+            clip instanceof MidiClip
+                ? "MidiClip"
+                : clip instanceof AudioClip
+                  ? "AudioClip"
+                  : "Clip",
         name: clip.name,
         duration: clip.duration,
         startTime: clip.startTime,
         endTime: clip.endTime,
-        noteCount: clip.notes.length,
     }
+}
+
+async function createClip(
+    context: ServerDeps["context"],
+    slot: ClipSlot<V>,
+    track: MidiTrack<V> | AudioTrack<V>,
+    params: CreateClipParams,
+): Promise<Clip<V>> {
+    if (track instanceof MidiTrack) {
+        if (params.length === undefined) {
+            throw new BadRequestError("length (beats) is required to create a MidiClip", {
+                hint: "Pass length for MidiTrack slots.",
+            })
+        }
+        const length = params.length
+        return context.withinTransaction(() => slot.createMidiClip(length))
+    }
+    if (params.audioFilePath === undefined) {
+        throw new BadRequestError("audioFilePath is required to create an audio session clip", {
+            hint: "Pass audioFilePath for AudioTrack slots.",
+        })
+    }
+    const filePath = params.audioFilePath
+    return context.withinTransaction(() => slot.createAudioClip({ filePath }))
 }
 
 async function runCreateClipTool(deps: ServerDeps, params: CreateClipParams): Promise<ToolResult> {
     try {
         const adapter = new LomGraphAdapter(deps.context)
         const node = resolveSingleClipSlot(await selectNodes(parseQuery(params.select), adapter))
-        const slot = node.value as ClipSlot<TargetApiVersion>
-        const track = resolveMidiTrack(slot)
+        const slot = node.value as ClipSlot<V>
+        const track = resolveClipTrack(slot)
         if (slot.clip !== null) {
             throw new BadRequestError("selected ClipSlot already contains a clip", {
                 hint: "Select a ClipSlot where hasClip is false.",
             })
         }
-        const track_index = trackIndex(deps.context.application.song.tracks, track)
-        const target = await adapter.serialize(node)
+        const kind = track instanceof MidiTrack ? "midi" : "audio"
         const summary = {
-            track: { index: track_index, name: track.name, kind: "midi" },
-            clipSlot: target,
-            length: params.length,
+            track: {
+                index: trackIndex(deps.context.application.song.tracks, track),
+                name: track.name,
+                kind,
+            },
+            clipSlot: await adapter.serialize(node),
+            length: params.length ?? null,
+            audioFilePath: params.audioFilePath ?? null,
         }
 
         if (params.preview === true) {
             return textResult({ status: "preview", ...summary })
         }
 
-        const clip = await deps.context.withinTransaction(() => slot.createMidiClip(params.length))
+        const clip = await createClip(deps.context, slot, track, params)
 
         return textResult({
             status: "ok",
@@ -106,20 +148,30 @@ async function runCreateClipTool(deps: ServerDeps, params: CreateClipParams): Pr
     }
 }
 
-/** `create_clip` ツール: 空の MidiTrack ClipSlot に空 MidiClip を生成する。 */
+/** `create_clip` ツール: 空 ClipSlot に MidiClip（length）または AudioClip（audioFilePath）を生成する。 */
 export function registerCreateTools(server: McpServer, deps: ServerDeps): void {
     server.registerTool(
         "create_clip",
         {
-            title: "空 MidiClip 生成",
+            title: "Session Clip 生成",
             description:
-                "select で選んだ 1 つの空 ClipSlot に、指定 length（beats）の空 MidiClip を生成する。対象は MidiTrack 配下の ClipSlot のみ。",
+                "select で選んだ 1 つの空 ClipSlot にセッションクリップを生成する。MidiTrack の ClipSlot は length（beats）で空 MidiClip、AudioTrack の ClipSlot は audioFilePath で AudioClip を作る。",
             inputSchema: {
                 select: z.string().min(1).describe(selectDescription()),
-                length: z.number().positive().describe("生成する MidiClip の長さ（beats）"),
+                length: z
+                    .number()
+                    .positive()
+                    .optional()
+                    .describe("MidiTrack の ClipSlot で生成する MidiClip の長さ（beats）"),
+                audioFilePath: z
+                    .string()
+                    .min(1)
+                    .optional()
+                    .describe("AudioTrack の ClipSlot で読み込むオーディオファイルの絶対パス"),
                 preview: z.boolean().optional().describe("生成せず対象と生成内容を返すドライラン"),
             },
         },
-        async ({ select, length, preview }) => runCreateClipTool(deps, { select, length, preview }),
+        async ({ select, length, audioFilePath, preview }) =>
+            runCreateClipTool(deps, { select, length, audioFilePath, preview }),
     )
 }
