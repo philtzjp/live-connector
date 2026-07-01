@@ -1,7 +1,7 @@
 {
     "name": "live-connector",
     "author": "Philtz",
-    "version": "2.11.0",
+    "version": "2.12.0",
     "entry": "dist/extension.js",
     "minimumApiVersion": "1.0.0"
 }

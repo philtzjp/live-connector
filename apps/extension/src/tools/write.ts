@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
+import { capturePropertiesSnapshot } from "./snapshots"
 
 /** これを超える件数の変更は confirm:true を要求する。 */
 const CONFIRM_THRESHOLD = 20
@@ -31,6 +32,7 @@ function selectDescription(label: string, example: string): string {
 async function runSetTool(
     deps: ServerDeps,
     requiredLabel: string,
+    toolName: string,
     params: SetParams,
 ): Promise<ToolResult> {
     try {
@@ -76,6 +78,15 @@ async function runSetTool(
             })
         }
 
+        const oldTargets = await Promise.all(nodes.map((node) => adapter.serialize(node)))
+        const snapshotId = await capturePropertiesSnapshot(deps, {
+            tool: toolName,
+            select: params.select,
+            requiredLabel,
+            properties: entries.map(([property]) => property),
+            oldTargets,
+        })
+
         await deps.context.withinTransaction(() => {
             const ops: Promise<void>[] = []
             for (const node of nodes) {
@@ -90,6 +101,7 @@ async function runSetTool(
             status: "ok",
             modified: nodes.length,
             set: Object.fromEntries(entries),
+            snapshotId,
         })
     } catch (error) {
         deps.log.error("set tool failed", { error: String(error) })
@@ -115,7 +127,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ set, preview, confirm }) =>
-            runSetTool(deps, "Song", { select: SONG_SELECT, set, preview, confirm }),
+            runSetTool(deps, "Song", "set_song", { select: SONG_SELECT, set, preview, confirm }),
     )
 
     server.registerTool(
@@ -140,7 +152,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Track", { select, set, preview, confirm }),
+            runSetTool(deps, "Track", "set_track", { select, set, preview, confirm }),
     )
 
     server.registerTool(
@@ -168,7 +180,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Clip", { select, set, preview, confirm }),
+            runSetTool(deps, "Clip", "set_clip", { select, set, preview, confirm }),
     )
 
     server.registerTool(
@@ -186,7 +198,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Scene", { select, set, preview, confirm }),
+            runSetTool(deps, "Scene", "set_scene", { select, set, preview, confirm }),
     )
 
     server.registerTool(
@@ -206,7 +218,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "CuePoint", { select, set, preview, confirm }),
+            runSetTool(deps, "CuePoint", "set_cue_point", { select, set, preview, confirm }),
     )
 
     server.registerTool(
@@ -229,6 +241,11 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Parameter", { select, set, preview, confirm }),
+            runSetTool(deps, "Parameter", "set_device_parameter", {
+                select,
+                set,
+                preview,
+                confirm,
+            }),
     )
 }

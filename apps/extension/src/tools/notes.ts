@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
+import { captureNotesSnapshot } from "./snapshots"
 
 const noteSchema = z.object({
     pitch: z.number().int().min(0).max(127),
@@ -184,11 +185,17 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         return textResult({ status: "preview", ...summary })
     }
 
+    const snapshotId = await captureNotesSnapshot(deps, {
+        tool: "write_notes",
+        select: params.select,
+        oldNotes: clip.notes,
+    })
+
     deps.context.withinTransaction(() => {
         clip.notes = next_notes
     })
 
-    return textResult({ status: "ok", ...summary })
+    return textResult({ status: "ok", ...summary, snapshotId })
 }
 
 /** `write_notes` ツール: select で選んだ単一 MidiClip の notes を replace / merge / clear_range する。 */
