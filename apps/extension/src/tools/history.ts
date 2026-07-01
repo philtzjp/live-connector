@@ -24,6 +24,7 @@ export const WRITE_HISTORY_TOOLS = new Set<string>([
     "write_notes",
     "transform_notes",
     "create_clip",
+    "create_track",
     "create_scene",
     "delete_scene",
     "duplicate_scene",

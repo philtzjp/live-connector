@@ -108,8 +108,54 @@ async function runCreateScene(
     })
 }
 
+async function runCreateTrack(
+    deps: ServerDeps,
+    params: { kind: "midi" | "audio"; name: string | undefined; preview: boolean | undefined },
+): Promise<ToolResult> {
+    const song = deps.context.application.song
+    if (params.preview === true) {
+        return textResult({ status: "preview", kind: params.kind, name: params.name ?? null })
+    }
+    const track = await deps.context.withinTransaction(() => {
+        const created = params.kind === "midi" ? song.createMidiTrack() : song.createAudioTrack()
+        return created.then((value) => {
+            if (params.name !== undefined) {
+                value.name = params.name
+            }
+            return value
+        })
+    })
+    const index = song.tracks.findIndex((candidate) => candidate.handle === track.handle)
+    return textResult({
+        status: "ok",
+        track: { index: index < 0 ? null : index, name: track.name, kind: params.kind },
+    })
+}
+
 /** SDK が提供する構造操作（シーン / トラック / デバイス / セッションクリップ）をツール化する。 */
 export function registerStructureTools(server: McpServer, deps: ServerDeps): void {
+    server.registerTool(
+        "create_track",
+        {
+            title: "Track 生成",
+            description:
+                "MIDI または Audio トラックを生成し、任意で name を設定する。SDK は挿入位置（index）を指定できず、最後に選択されたトラックの直後（未選択なら末尾）に生成される。生成トラックの ClipSlot 数は既存シーン数に一致する。生成直後の MidiTrack は音源が無いため発音しない（insert_device と併用する）。",
+            inputSchema: {
+                kind: z.enum(["midi", "audio"]).describe("生成するトラック種別"),
+                name: z.string().min(1).optional().describe("生成後に設定するトラック名"),
+                preview: z.boolean().optional().describe("生成せず内容を返すドライラン"),
+            },
+        },
+        async ({ kind, name, preview }) => {
+            try {
+                return await runCreateTrack(deps, { kind, name, preview })
+            } catch (error) {
+                deps.log.error("create_track failed", { error: String(error) })
+                return textResult(toMcpError(error), true)
+            }
+        },
+    )
+
     server.registerTool(
         "create_scene",
         {

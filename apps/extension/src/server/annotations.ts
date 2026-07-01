@@ -45,6 +45,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     restore_snapshot: IDEMPOTENT_WRITE,
     // creating writes（毎回新規生成）
     create_clip: CREATE_WRITE,
+    create_track: CREATE_WRITE,
     create_scene: CREATE_WRITE,
     create_arrangement_clip: CREATE_WRITE,
     create_cue_point: CREATE_WRITE,
