@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.6.0"
+            value: "2.7.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.6.0"
+            value: "2.7.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.6.0"
+            value: "2.7.0"
           - name: "description"
             type: "string"
             required: true
@@ -1408,6 +1408,42 @@ mcp_tools:
                       optional: true
                       type: "string"
 
+    - name: "transform_notes"
+      source: "apps/extension/src/tools/transform-notes.ts"
+      note: "select で選んだ MidiClip の notes を決定的変換する。クリップ相対座標。pitch 0..127 外は削除、startTime [0,クリップ長) 外は onOutOfRange で drop/error。"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "MidiClip を単一ノード変数で RETURN する Cypher。"
+          transform:
+              type: "TransformSpec"
+              required: true
+              note: "transpose{semitones} / time_shift{delta} / velocity{scale?,offset?} / quantize{grid,strength?} / duplicate{offset,count?}。"
+          filter:
+              type: "NoteFilter"
+              required: false
+              note: "timeStart / timeEnd / pitchMin / pitchMax。対象ノートの絞り込み。"
+          onOutOfRange:
+              type: "\"drop\" | \"error\""
+              required: false
+              default: "drop"
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  transform: "string"
+                  clipLength: "number"
+                  affected: "number"
+                  droppedPitch: "number"
+                  droppedTime: "number"
+                  before: "{ noteCount, pitchRange, timeRange }"
+                  after: "{ noteCount, pitchRange, timeRange }"
+
     - name: "write_notes"
       source: "apps/extension/src/tools/notes.ts"
       input:
@@ -1769,7 +1805,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.6.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.7.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
@@ -2138,6 +2174,7 @@ cypher_contract:
             - "save_device_state"
             - "apply_device_state"
             - "write_notes"
+            - "transform_notes"
         required: "RETURN exactly one bound node variable"
         valid_examples:
             - "MATCH (t:AudioTrack {name:\"Print\"}) RETURN t"
