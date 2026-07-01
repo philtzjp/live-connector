@@ -92,4 +92,33 @@ describe("get_overview", () => {
         }
         expect(json.arrangementEndTime).toBe(8)
     })
+
+    it("omits per-clip detail when includeClips is false", async () => {
+        const { json } = (await server.call("get_overview", { includeClips: false })) as {
+            json: {
+                includeClips: boolean
+                tracks: { arrangementClipCount: number; arrangementClips?: unknown }[]
+            }
+        }
+        expect(json.includeClips).toBe(false)
+        expect(json.tracks[0]?.arrangementClipCount).toBe(1)
+        expect(json.tracks[0]?.arrangementClips).toBeUndefined()
+    })
+
+    it("limits the track range and keeps the total count and end time", async () => {
+        const { json } = (await server.call("get_overview", { trackOffset: 1, trackLimit: 1 })) as {
+            json: {
+                trackCount: number
+                trackOffset: number
+                tracksShown: number
+                arrangementEndTime: number
+                tracks: { index: number; name: string }[]
+            }
+        }
+        expect(json.trackCount).toBe(2)
+        expect(json.trackOffset).toBe(1)
+        expect(json.tracksShown).toBe(1)
+        expect(json.arrangementEndTime).toBe(8)
+        expect(json.tracks).toEqual([expect.objectContaining({ index: 1, name: "Bass" })])
+    })
 })
