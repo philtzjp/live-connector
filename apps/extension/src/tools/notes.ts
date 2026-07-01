@@ -43,6 +43,33 @@ export function findOutOfRangeNotes(
     return offending
 }
 
+function collisionKey(note: { pitch: number; startTime: number }): string {
+    return `${note.pitch}:${note.startTime}`
+}
+
+/**
+ * 既存ノートへ入力ノートを追加する。同一 pitch かつ同一 startTime の衝突は入力側で置換する
+ * （重複ノートの積み上げを避ける）。
+ */
+export function mergeNotes(
+    existing: readonly NoteDescription[],
+    incoming: readonly NoteDescription[],
+): NoteDescription[] {
+    const incoming_keys = new Set(incoming.map(collisionKey))
+    const kept = existing.filter((note) => !incoming_keys.has(collisionKey(note)))
+    return [...kept, ...incoming]
+}
+
+/** 指定範囲 [start, end)（クリップ相対拍）の startTime を持つノートを取り除く。 */
+export function clearNotesInRange(
+    existing: readonly NoteDescription[],
+    start: number,
+    end: number,
+): { kept: NoteDescription[]; removed: number } {
+    const kept = existing.filter((note) => note.startTime < start || note.startTime >= end)
+    return { kept, removed: existing.length - kept.length }
+}
+
 function selectDescription(): string {
     return 'MidiClip を単一ノード変数で RETURN する Cypher。query のようなプロパティ射影（RETURN c.name）や複数変数（RETURN t, c）は不可。例: MATCH (c:MidiClip {name:"Bass"}) RETURN c'
 }
@@ -71,18 +98,118 @@ function toNoteDescription(input: NoteInput): NoteDescription {
     return note
 }
 
-/** `write_notes` ツール: select で選んだ単一 MidiClip の notes を置換する。 */
+type WriteNotesParams = {
+    select: string
+    notes: NoteInput[]
+    mode: "replace" | "merge" | "clear_range"
+    range: { start: number; end: number } | undefined
+    allowOutOfRange: boolean | undefined
+    preview: boolean | undefined
+}
+
+type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
+
+function textResult(payload: unknown, isError = false): ToolResult {
+    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError }
+}
+
+async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promise<ToolResult> {
+    const adapter = new LomGraphAdapter(deps.context)
+    const nodes = await selectNodes(parseQuery(params.select), adapter)
+    if (nodes.length !== 1) {
+        throw new BadRequestError(
+            `write_notes requires the selection to match exactly one MidiClip, but matched ${nodes.length}`,
+            {
+                hint: 'Change select so it returns exactly one MidiClip node, e.g. MATCH (c:MidiClip {name:"Bass"}) RETURN c.',
+            },
+        )
+    }
+    const node = nodes[0]
+    if (node === undefined || node.type !== "object" || !(node.value instanceof MidiClip)) {
+        throw new BadRequestError("select must return a MidiClip", {
+            hint: "Use a select query that returns a MidiClip node.",
+        })
+    }
+    const clip = node.value
+    const clip_length = clipNoteLength(clip)
+    const incoming = params.notes.map(toNoteDescription)
+
+    const out_of_range =
+        params.mode === "clear_range" ? [] : findOutOfRangeNotes(params.notes, clip_length)
+    if (out_of_range.length > 0 && params.allowOutOfRange !== true) {
+        throw new BadRequestError(
+            `${out_of_range.length} note(s) fall outside the clip's relative range [0, ${clip_length}). Note startTime is clip-relative beats, not arrangement-absolute beats.`,
+            {
+                hint: `LOM has two time coordinate systems: note startTime / clip markers are CLIP-RELATIVE beats in [0, clipLength); Clip.startTime/endTime and create_arrangement_clip startTime are ARRANGEMENT-ABSOLUTE beats. Recompute the offending notes relative to the clip start, or pass allowOutOfRange:true. Offending indices: ${out_of_range.map((entry) => `${entry.index}@${entry.startTime}`).join(", ")}.`,
+            },
+        )
+    }
+
+    let next_notes: NoteDescription[]
+    const summary: Record<string, unknown> = {
+        mode: params.mode,
+        clipLength: clip_length,
+        outOfRange: out_of_range.length,
+    }
+
+    if (params.mode === "replace") {
+        next_notes = incoming
+        summary.noteCount = next_notes.length
+    } else if (params.mode === "merge") {
+        const existing = clip.notes
+        next_notes = mergeNotes(existing, incoming)
+        summary.added = incoming.length
+        summary.previous = existing.length
+        summary.noteCount = next_notes.length
+    } else {
+        if (params.range === undefined) {
+            throw new BadRequestError("clear_range mode requires a range {start, end}", {
+                hint: "Pass range as clip-relative beats, e.g. range:{start:0, end:4}.",
+            })
+        }
+        if (params.range.end <= params.range.start) {
+            throw new BadRequestError(
+                `range.end (${params.range.end}) must be greater than range.start (${params.range.start})`,
+            )
+        }
+        const existing = clip.notes
+        const cleared = clearNotesInRange(existing, params.range.start, params.range.end)
+        next_notes = cleared.kept
+        summary.removed = cleared.removed
+        summary.range = params.range
+        summary.noteCount = next_notes.length
+    }
+
+    if (params.preview === true) {
+        return textResult({ status: "preview", ...summary })
+    }
+
+    deps.context.withinTransaction(() => {
+        clip.notes = next_notes
+    })
+
+    return textResult({ status: "ok", ...summary })
+}
+
+/** `write_notes` ツール: select で選んだ単一 MidiClip の notes を replace / merge / clear_range する。 */
 export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
     server.registerTool(
         "write_notes",
         {
             title: "MIDI ノート書き込み",
             description:
-                "select で選んだ 1 つの MidiClip の notes を置換する（mode: replace）。各ノートの startTime/duration はクリップ相対拍（[0, クリップ長)）。アレンジメント絶対拍（Clip.startTime や create_arrangement_clip の startTime）とは座標系が異なる。クリップ長を超える startTime のノートは既定で拒否する（allowOutOfRange:true で許容）。",
+                "select で選んだ 1 つの MidiClip の notes を編集する。mode: replace（全置換）/ merge（既存を保持し追加。同一 pitch+startTime は入力で置換）/ clear_range（range のノートを削除）。startTime/duration はクリップ相対拍（[0, クリップ長)）。アレンジメント絶対拍とは座標系が異なる。クリップ長を超える startTime は既定で拒否（allowOutOfRange:true で許容）。",
             inputSchema: {
                 select: z.string().min(1).describe(selectDescription()),
-                notes: z.array(noteSchema),
-                mode: z.enum(["replace"]).default("replace"),
+                notes: z
+                    .array(noteSchema)
+                    .default([])
+                    .describe("replace / merge の対象ノート。clear_range では無視する"),
+                mode: z.enum(["replace", "merge", "clear_range"]).default("replace"),
+                range: z
+                    .object({ start: z.number().min(0), end: z.number().positive() })
+                    .optional()
+                    .describe("clear_range で削除する範囲（クリップ相対拍 [start, end)）"),
                 allowOutOfRange: z
                     .boolean()
                     .optional()
@@ -90,88 +217,19 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
                 preview: z.boolean().optional(),
             },
         },
-        async ({ select, notes, allowOutOfRange, preview }) => {
+        async ({ select, notes, mode, range, allowOutOfRange, preview }) => {
             try {
-                const adapter = new LomGraphAdapter(deps.context)
-                const nodes = await selectNodes(parseQuery(select), adapter)
-                if (nodes.length !== 1) {
-                    throw new BadRequestError(
-                        `write_notes requires the selection to match exactly one MidiClip, but matched ${nodes.length}`,
-                        {
-                            hint: 'Change select so it returns exactly one MidiClip node, e.g. MATCH (c:MidiClip {name:"Bass"}) RETURN c.',
-                        },
-                    )
-                }
-                const node = nodes[0]
-                if (
-                    node === undefined ||
-                    node.type !== "object" ||
-                    !(node.value instanceof MidiClip)
-                ) {
-                    throw new BadRequestError("select must return a MidiClip", {
-                        hint: "Use a select query that returns a MidiClip node.",
-                    })
-                }
-                const clip = node.value
-                const clip_length = clipNoteLength(clip)
-                const out_of_range = findOutOfRangeNotes(notes, clip_length)
-                if (out_of_range.length > 0 && allowOutOfRange !== true) {
-                    throw new BadRequestError(
-                        `${out_of_range.length} note(s) fall outside the clip's relative range [0, ${clip_length}). Note startTime is clip-relative beats, not arrangement-absolute beats.`,
-                        {
-                            hint: `LOM has two time coordinate systems: note startTime / clip markers are CLIP-RELATIVE beats in [0, clipLength); Clip.startTime/endTime and create_arrangement_clip startTime are ARRANGEMENT-ABSOLUTE beats. Recompute the offending notes relative to the clip start, or pass allowOutOfRange:true. Offending indices: ${out_of_range.map((entry) => `${entry.index}@${entry.startTime}`).join(", ")}.`,
-                        },
-                    )
-                }
-                const descriptions = notes.map(toNoteDescription)
-
-                if (preview === true) {
-                    return {
-                        content: [
-                            {
-                                type: "text",
-                                text: JSON.stringify(
-                                    {
-                                        status: "preview",
-                                        noteCount: descriptions.length,
-                                        clipLength: clip_length,
-                                        outOfRange: out_of_range.length,
-                                    },
-                                    null,
-                                    2,
-                                ),
-                            },
-                        ],
-                    }
-                }
-
-                deps.context.withinTransaction(() => {
-                    clip.notes = descriptions
+                return await runWriteNotes(deps, {
+                    select,
+                    notes,
+                    mode,
+                    range,
+                    allowOutOfRange,
+                    preview,
                 })
-
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: JSON.stringify(
-                                {
-                                    status: "ok",
-                                    noteCount: descriptions.length,
-                                    clipLength: clip_length,
-                                    outOfRange: out_of_range.length,
-                                },
-                                null,
-                                2,
-                            ),
-                        },
-                    ],
-                }
             } catch (error) {
                 deps.log.error("write_notes failed", { error: String(error) })
-                return {
-                    content: [{ type: "text", text: JSON.stringify(toMcpError(error), null, 2) }],
-                    isError: true,
-                }
+                return textResult(toMcpError(error), true)
             }
         },
     )
