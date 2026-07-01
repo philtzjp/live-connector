@@ -175,7 +175,9 @@ sequenceDiagram
 | `save_device_state` | write/fs | 1 つの Device の公開 DeviceParameter 値を `environment.storageDirectory` に JSON 保存する |
 | `apply_device_state` | write/fs | 保存済み DeviceParameter 値を 1 つの Device の同名パラメータへ再適用する |
 | `load_sample` | write/fs | 1 つの Simpler に importIntoProject + replaceSample でオーディオを読み込む |
-| `write_notes` | write | 1 つの MidiClip の notes を replace する |
+| `write_notes` | write | 1 つの MidiClip の notes を replace / merge / clear_range する |
+| `restore_snapshot` | write | snapshotId を指定して set_* / write_notes の変更前の値へ書き戻す |
+| `list_snapshots` | read | 保存済みスナップショット（id / 時刻 / ツール / 種別 / select）を新しい順に取得する |
 
 ## 読み取りフロー
 
@@ -233,6 +235,10 @@ sequenceDiagram
 ```
 
 単一対象ツールの `select` は対象ノード集合を解決する selector であり、`RETURN` は単一ノード変数に限定される。`render_audio` はちょうど 1 つの `AudioTrack` を要求し、指定 beat 範囲の arrangement pre-FX 音声を WAV として生成する。`create_arrangement_clip` はちょうど 1 つの `MidiTrack` または `AudioTrack` を要求し、arrangement timeline に `startTime` / `duration` 指定で clip を作成する。`delete_arrangement_clip` は `HAS_ARRANGEMENT_CLIP` で辿れる clip だけを削除し、session clip は対象外とする。`create_cue_point` / `delete_cue_point` は Song の CuePoint を作成・削除する。`create_clip` はちょうど 1 つの空 `ClipSlot` を要求し、親が `MidiTrack` である場合のみ空 `MidiClip` を生成する。`set_*` は対象件数が `CONFIRM_THRESHOLD` を超える場合に `confirm:true` を要求する。`set_cue_point` は `CuePoint.name` を書き込む。`save_device_state` / `apply_device_state` はちょうど 1 つの `Device` を要求し、公開 `DeviceParameter` の値だけを JSON 保存・再適用する。`write_notes` はちょうど 1 つの `MidiClip` を要求し、notes を replace する。
+
+## 巻き戻し（スナップショット）
+
+SDK v1.0.0-beta.0 には undo / redo を実行する API が無い（`ExtensionContext` はトランザクションの undoable 性を記述するのみ）。このため `set_*` / `write_notes` は適用直前に旧値を `environment.storageDirectory/snapshots/<id>.json` へスナップショットし、応答に `snapshotId` を返す。`restore_snapshot` は `select` を再解決して旧プロパティ値 / 旧 notes を書き戻す。復元は best-effort であり、対象が削除・移動されている場合や select が異なる件数にマッチする場合は部分的・不可となる。構造操作（create / delete / duplicate）や `move_clip` / `trim_clip` の非可逆属性はこの機構の対象外。保持は最新 `MAX_SNAPSHOTS`(100) 件でローテーションする。upstream（Ableton Extensions SDK）への undo / redo API 追加要望は本機構の前提であり、追加され次第この代替を置き換える。
 
 ## データ所有
 
