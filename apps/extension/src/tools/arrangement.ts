@@ -766,14 +766,21 @@ export function registerArrangementTools(server: McpServer, deps: ServerDeps): v
         {
             title: "アレンジメント Clip 作成",
             description:
-                "select で選んだ 1 つの MidiTrack または AudioTrack に、startTime/duration（beats）指定でアレンジメント Clip を作成する。AudioTrack では audioFilePath が必須。移動・トリムは SDK 非対応のため、削除＋再作成で扱う。",
+                "select で選んだ 1 つの MidiTrack または AudioTrack にアレンジメント Clip を作成する。必須: select・startTime・duration（AudioTrack はさらに audioFilePath）。長さは length ではなく duration（beats）。例: {select:'MATCH (t:MidiTrack {name:\"Lead\"}) RETURN t', startTime:0, duration:4}。移動・トリムは SDK 非対応のため、削除＋再作成で扱う。",
             inputSchema: {
                 select: z.string().min(1).describe(trackSelectDescription()),
-                startTime: z.number().min(0),
-                duration: z.number().positive(),
-                name: z.string().min(1).optional(),
-                audioFilePath: z.string().min(1).optional(),
-                isWarped: z.boolean().optional(),
+                startTime: z.number().min(0).describe("配置位置。アレンジメント絶対拍（beats）"),
+                duration: z
+                    .number()
+                    .positive()
+                    .describe("クリップ長（beats）。length ではなく duration を使う"),
+                name: z.string().min(1).optional().describe("作成後に設定するクリップ名"),
+                audioFilePath: z
+                    .string()
+                    .min(1)
+                    .optional()
+                    .describe("AudioTrack を選択した場合は必須のオーディオファイル絶対パス"),
+                isWarped: z.boolean().optional().describe("AudioClip の warp を有効化する"),
                 loopSettings: loop_settings_schema,
                 preview: z.boolean().optional(),
             },

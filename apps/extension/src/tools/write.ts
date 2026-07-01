@@ -18,6 +18,8 @@ type SetParams = {
     set: Record<string, ScalarValue | undefined>
     preview: boolean | undefined
     confirm: boolean | undefined
+    /** 対象が無い / 型不一致のときに、新規作成ツール等を案内する追加ヒント。 */
+    createHint?: string
 }
 
 function textResult(payload: unknown, isError = false): ToolResult {
@@ -43,22 +45,23 @@ async function runSetTool(
             throw new BadRequestError("`set` must contain at least one property to write")
         }
 
+        const create_suffix = params.createHint !== undefined ? ` ${params.createHint}` : ""
         const adapter = new LomGraphAdapter(deps.context)
         const nodes = await selectNodes(parseQuery(params.select), adapter)
         for (const node of nodes) {
             if (!adapter.matchesLabel(node, requiredLabel)) {
                 throw new BadRequestError(
-                    `select must return ${requiredLabel} nodes, but matched ${adapter.labelOf(node)}`,
+                    `${toolName} edits existing ${requiredLabel} nodes, but the select matched a ${adapter.labelOf(node)} node`,
                     {
-                        hint: `Change the select query so it returns ${requiredLabel} nodes only.`,
+                        hint: `Change the select query so it returns ${requiredLabel} nodes only.${create_suffix}`,
                     },
                 )
             }
         }
 
         if (nodes.length === 0) {
-            throw new NotFoundError("select matched 0 nodes", {
-                hint: "Adjust the select query or run query/schema to inspect available labels, properties and relationships.",
+            throw new NotFoundError(`select matched no ${requiredLabel} to edit`, {
+                hint: `Adjust the select query, or run query/schema to inspect available ${requiredLabel} nodes.${create_suffix}`,
             })
         }
         if (params.preview === true) {
@@ -134,7 +137,8 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
         "set_track",
         {
             title: "Track プロパティ書き込み",
-            description: "select で選んだ Track に name/arm/mute/solo を書き込む。",
+            description:
+                "select で選んだ既存 Track に name/arm/mute/solo を書き込む。新規作成は create_track を使う。ミキサーの volume/panning/send は HAS_MIXER 経由の Parameter を set_device_parameter で書く。",
             inputSchema: {
                 select: z
                     .string()
@@ -152,7 +156,13 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Track", "set_track", { select, set, preview, confirm }),
+            runSetTool(deps, "Track", "set_track", {
+                select,
+                set,
+                preview,
+                confirm,
+                createHint: "To create a new track, use create_track.",
+            }),
     )
 
     server.registerTool(
@@ -187,7 +197,8 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
         "set_scene",
         {
             title: "Scene プロパティ書き込み",
-            description: "select で選んだ Scene に name を書き込む。",
+            description:
+                "select で選んだ既存 Scene の name を編集する。新規作成は create_scene を使う。",
             inputSchema: {
                 select: z
                     .string()
@@ -198,14 +209,21 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "Scene", "set_scene", { select, set, preview, confirm }),
+            runSetTool(deps, "Scene", "set_scene", {
+                select,
+                set,
+                preview,
+                confirm,
+                createHint: "To create a new scene, use create_scene.",
+            }),
     )
 
     server.registerTool(
         "set_cue_point",
         {
             title: "CuePoint プロパティ書き込み",
-            description: "select で選んだ CuePoint に name を書き込む。",
+            description:
+                "select で選んだ既存 CuePoint の name を編集する（編集専用）。新規作成は create_cue_point を使う。",
             inputSchema: {
                 select: z
                     .string()
@@ -218,7 +236,13 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             },
         },
         async ({ select, set, preview, confirm }) =>
-            runSetTool(deps, "CuePoint", "set_cue_point", { select, set, preview, confirm }),
+            runSetTool(deps, "CuePoint", "set_cue_point", {
+                select,
+                set,
+                preview,
+                confirm,
+                createHint: "To create a new CuePoint, use create_cue_point.",
+            }),
     )
 
     server.registerTool(
