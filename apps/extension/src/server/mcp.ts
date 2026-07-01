@@ -17,6 +17,20 @@ import { registerStructureTools } from "../tools/structure"
 import { registerTransformNotesTool } from "../tools/transform-notes"
 import { registerWriteTools } from "../tools/write"
 import { SERVICE_VERSION } from "../version"
+import { withToolAnnotations } from "./annotations"
+
+/** initialize 応答でクライアントへ配布する運用規約の要約。 */
+const SERVER_INSTRUCTIONS = `live-connector controls an Ableton Live Set as a property graph over the Live Object Model (LOM).
+
+Recommended flow: (1) call schema for labels/properties/relationships and the query contract; (2) read with query (Cypher subset: MATCH/WHERE/RETURN with aggregates count/min/max/avg/sum, ORDER BY, DISTINCT, SKIP/LIMIT); (3) for writes, run preview:true first, then apply.
+
+Time coordinates (two systems, do not mix): note startTime and clip markers (startMarker/endMarker/loopStart/loopEnd) are CLIP-RELATIVE beats in [0, clipLength). Clip.startTime/endTime, CuePoint.time and create_arrangement_clip/move_clip startTime are ARRANGEMENT-ABSOLUTE beats. write_notes rejects out-of-range notes unless allowOutOfRange:true.
+
+Guardrails: bulk property writes over 20 targets need confirm:true; query without LIMIT truncates at 500 rows (truncated:true); destructive delete_* tools need confirm:true. set_* and write_notes return a snapshotId; restore_snapshot rolls back. batch groups set_*/write_notes into one undo step.
+
+Mixer: track volume, panning and sends are Parameters reached via (Track)-[:HAS_MIXER]->(Mixer)-[:HAS_VOLUME|HAS_PAN|HAS_SEND]->(Parameter). Read with query and write with set_device_parameter (value), not set_track.
+
+Tool annotations mark read-only, destructive and idempotent operations.`
 
 /** 登録ツール構成のサマリ。/health で稼働ホストのツール構成を外形確認するために使う。 */
 export type RegisteredToolsSummary = {
@@ -57,9 +71,12 @@ function toolsDigest(names: string[]): string {
 
 /** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
 export function createMcpServer(deps: ServerDeps): McpServer {
-    const server = new McpServer({ name: "live-connector", version: SERVICE_VERSION })
-    // 書き込みツールのハンドラを履歴記録でラップする facade を通して登録する。
-    registerAllTools(withWriteHistory(server, deps), deps)
+    const server = new McpServer(
+        { name: "live-connector", version: SERVICE_VERSION },
+        { instructions: SERVER_INSTRUCTIONS },
+    )
+    // annotations 注入 → 書き込み履歴ラップ の facade を重ねて登録する。
+    registerAllTools(withToolAnnotations(withWriteHistory(server, deps)), deps)
     return server
 }
 
