@@ -59,14 +59,43 @@ export type NotExpr = {
 
 export type WhereExpr = ComparisonExpr | LogicalExpr | NotExpr
 
+export type AggregateFunc = "count" | "min" | "max" | "avg" | "sum"
+
+export type AggregateArg =
+    | { kind: "star" }
+    | { kind: "variable"; variable: string }
+    | { kind: "property"; variable: string; property: string }
+
+export type AggregateItem = {
+    kind: "aggregate"
+    func: AggregateFunc
+    arg: AggregateArg
+    /** RETURN 行のキー・ORDER BY 参照に使う正規化した表記（例: "count(n)", "avg(n.pitch)", "count(*)"）。 */
+    alias: string
+}
+
 export type ReturnItem =
     | { kind: "all" }
     | { kind: "variable"; variable: string }
     | { kind: "property"; variable: string; property: string }
+    | AggregateItem
+
+export type OrderKey =
+    | { kind: "variable"; variable: string }
+    | { kind: "property"; variable: string; property: string }
+    | AggregateItem
+
+export type OrderItem = {
+    key: OrderKey
+    direction: "ASC" | "DESC"
+}
 
 export type Query = {
     pattern: PatternPart
     where: WhereExpr | null
+    distinct: boolean
     returns: ReturnItem[]
+    orderBy: OrderItem[]
+    skip: number | null
     limit: number | null
 }

@@ -15,7 +15,7 @@ export function registerQueryTool(server: McpServer, deps: ServerDeps): void {
         {
             title: "Cypher 読み取りクエリ",
             description:
-                "Cypher サブセット（MATCH <pattern> [WHERE ...] RETURN ... [LIMIT n]）で LOM を読む。ラベル・プロパティ・リレーションは schema ツールを参照。書き込みは不可。",
+                "Cypher サブセット（MATCH <pattern> [WHERE ...] RETURN [DISTINCT] ... [ORDER BY expr [ASC|DESC]] [SKIP n] [LIMIT n]）で LOM を読む。集計関数 count/min/max/avg/sum に対応（非集計項目で暗黙グルーピング）。ラベル・プロパティ・リレーションは schema ツールを参照。書き込みは不可。",
             inputSchema: {
                 cypher: z.string().min(1).describe("実行する Cypher 読み取りクエリ"),
             },

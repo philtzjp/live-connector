@@ -27,6 +27,12 @@ const KEYWORDS = new Set([
     "STARTS",
     "WITH",
     "IN",
+    "DISTINCT",
+    "ORDER",
+    "BY",
+    "SKIP",
+    "ASC",
+    "DESC",
 ])
 
 const PUNCT_TWO = new Set(["->", "..", ">=", "<=", "<>"])

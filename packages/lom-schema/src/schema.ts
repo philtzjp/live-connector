@@ -34,17 +34,23 @@ export const startable_labels: string[] = [
 ]
 
 export const query_contract: QueryContract = {
-    grammar: "MATCH <pattern> [WHERE <expr>] RETURN <items> [LIMIT <integer>]",
+    grammar:
+        "MATCH <pattern> [WHERE <expr>] RETURN [DISTINCT] <items> [ORDER BY <expr> [ASC|DESC], ...] [SKIP <integer>] [LIMIT <integer>]",
     start_labels: startable_labels,
     read: {
         tool: "query",
         return_contract:
-            "RETURN は *, ノード変数、プロパティ射影、カンマ区切りの組み合わせを許可する。",
+            "RETURN は *, ノード変数、プロパティ射影、集計関数（count/min/max/avg/sum）、カンマ区切りの組み合わせを許可する。集計と非集計を混在させると、非集計項目をキーとした暗黙グルーピングで集計行を返す。DISTINCT は行の重複を排除する。",
         allowed_returns: [
             "RETURN *",
             "RETURN node_variable",
             "RETURN node_variable.property",
             "RETURN item1, item2, ...",
+            "RETURN DISTINCT ...",
+            "RETURN count(*) | count(var) | count(var.prop)",
+            "RETURN min(var.prop) | max(var.prop) | avg(var.prop) | sum(var.prop)",
+            "... ORDER BY var.prop | count(var) [ASC|DESC], ...",
+            "... SKIP <integer> LIMIT <integer>",
         ],
     },
     select: {
@@ -273,4 +279,6 @@ export const EXAMPLE_QUERIES: string[] = [
     'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',
     "MATCH (t:MidiTrack {mute:true})-[:HAS_CLIPSLOT]->(:ClipSlot)-[:HAS_CLIP]->(c:Clip) RETURN t.name, c.index, c.name",
     "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n",
+    "MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN c.name, count(n), max(n.pitch) ORDER BY count(n) DESC",
+    "MATCH (t:Track)-[:HAS_ARRANGEMENT_CLIP]->(c:Clip) RETURN c.name, c.startTime ORDER BY c.startTime SKIP 0 LIMIT 20",
 ]

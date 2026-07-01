@@ -1,9 +1,12 @@
 import { BadRequestError } from "@live-connector/error"
 import type {
+    AggregateItem,
     ComparisonExpr,
     NodePattern,
+    OrderItem,
     Query,
     RelationshipPattern,
+    ReturnItem,
     ScalarValue,
     WhereExpr,
 } from "./ast"
@@ -207,15 +210,20 @@ async function matchBindings<N>(query: Query, adapter: GraphAdapter<N>): Promise
         bindings = filtered
     }
 
-    if (query.limit !== null) {
-        bindings = bindings.slice(0, query.limit)
-    }
+    // DISTINCT / ORDER BY / SKIP / LIMIT は行射影後に適用するため、ここでは行わない。
     return bindings
+}
+
+/** SKIP / LIMIT を配列へ適用する（skip 未指定=0、limit 未指定=末尾まで）。 */
+function sliceRange<T>(items: T[], skip: number | null, limit: number | null): T[] {
+    const start = skip ?? 0
+    const end = limit === null ? items.length : start + limit
+    return items.slice(start, end)
 }
 
 /**
  * 書き込み対象の選択用に、単一変数を RETURN するクエリの束縛ノード集合を返す。
- * identity による重複排除を行う。
+ * identity による重複排除の後、SKIP / LIMIT を適用する。
  */
 export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Promise<N[]> {
     const returns = query.returns
@@ -240,38 +248,333 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
             nodes.push(node)
         }
     }
-    return nodes
+    return sliceRange(nodes, query.skip, query.limit)
 }
 
-/** AST を GraphAdapter 越しに評価し、結果行を返す。 */
-export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promise<Row[]> {
-    const bindings = await matchBindings(query, adapter)
-    const rows: Row[] = []
+function requireNode<N>(binding: Binding<N>, variable: string, clause: string): N {
+    const node = binding.vars.get(variable)
+    if (node === undefined) {
+        throw new BadRequestError(`Unknown variable "${variable}" in ${clause}`, {
+            hint: "Use a variable that is bound in the MATCH pattern.",
+        })
+    }
+    return node
+}
+
+/** 非集計クエリの 1 束縛を 1 行へ射影する。 */
+async function projectRow<N>(
+    returns: ReturnItem[],
+    adapter: GraphAdapter<N>,
+    binding: Binding<N>,
+): Promise<Row> {
+    const row: Row = {}
+    for (const item of returns) {
+        if (item.kind === "all") {
+            for (const [name, node] of binding.vars) {
+                row[name] = await adapter.serialize(node)
+            }
+        } else if (item.kind === "variable") {
+            row[item.variable] = await adapter.serialize(
+                requireNode(binding, item.variable, "RETURN"),
+            )
+        } else if (item.kind === "property") {
+            row[`${item.variable}.${item.property}`] = await adapter.getProperty(
+                requireNode(binding, item.variable, "RETURN"),
+                item.property,
+            )
+        }
+    }
+    return row
+}
+
+function coerceScalar(value: unknown): ScalarValue {
+    if (
+        value === null ||
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+    ) {
+        return value
+    }
+    return null
+}
+
+/** null 最後、数値は数値比較、真偽は false<true、それ以外は文字列比較。 */
+function compareValues(left: ScalarValue, right: ScalarValue): number {
+    if (left === right) {
+        return 0
+    }
+    if (left === null) {
+        return 1
+    }
+    if (right === null) {
+        return -1
+    }
+    if (typeof left === "number" && typeof right === "number") {
+        return left - right
+    }
+    if (typeof left === "boolean" && typeof right === "boolean") {
+        return (left ? 1 : 0) - (right ? 1 : 0)
+    }
+    return String(left).localeCompare(String(right))
+}
+
+function compareTuples(left: ScalarValue[], right: ScalarValue[], orderBy: OrderItem[]): number {
+    for (let index = 0; index < orderBy.length; index++) {
+        let comparison = compareValues(left[index] ?? null, right[index] ?? null)
+        if (orderBy[index]?.direction === "DESC") {
+            comparison = -comparison
+        }
+        if (comparison !== 0) {
+            return comparison
+        }
+    }
+    return 0
+}
+
+function distinctRows(rows: Row[]): Row[] {
+    const seen = new Set<string>()
+    const out: Row[] = []
+    for (const row of rows) {
+        const key = JSON.stringify(row)
+        if (!seen.has(key)) {
+            seen.add(key)
+            out.push(row)
+        }
+    }
+    return out
+}
+
+/** 非集計クエリの ORDER BY 値を束縛から求める（未射影のプロパティも参照可）。 */
+async function orderValuesFromBinding<N>(
+    orderBy: OrderItem[],
+    adapter: GraphAdapter<N>,
+    binding: Binding<N>,
+): Promise<ScalarValue[]> {
+    const values: ScalarValue[] = []
+    for (const item of orderBy) {
+        const key = item.key
+        if (key.kind === "property") {
+            values.push(
+                await adapter.getProperty(
+                    requireNode(binding, key.variable, "ORDER BY"),
+                    key.property,
+                ),
+            )
+        } else if (key.kind === "aggregate") {
+            throw new BadRequestError(
+                "ORDER BY with an aggregate requires aggregate functions in RETURN",
+                { hint: "Add the aggregate to RETURN, e.g. RETURN t, count(n) ORDER BY count(n)." },
+            )
+        } else {
+            throw new BadRequestError(
+                `ORDER BY requires a property such as ORDER BY ${key.variable}.startTime, not a bare node variable`,
+                { hint: "Order by a property of a bound variable." },
+            )
+        }
+    }
+    return values
+}
+
+async function evaluateSimple<N>(
+    query: Query,
+    adapter: GraphAdapter<N>,
+    bindings: Binding<N>[],
+): Promise<Row[]> {
+    const entries: { row: Row; sortKeys: ScalarValue[] }[] = []
     for (const binding of bindings) {
-        const row: Row = {}
-        for (const item of query.returns) {
-            if (item.kind === "all") {
-                for (const [name, node] of binding.vars) {
-                    row[name] = await adapter.serialize(node)
-                }
-                continue
+        entries.push({
+            row: await projectRow(query.returns, adapter, binding),
+            sortKeys:
+                query.orderBy.length > 0
+                    ? await orderValuesFromBinding(query.orderBy, adapter, binding)
+                    : [],
+        })
+    }
+    if (query.orderBy.length > 0) {
+        entries.sort((left, right) => compareTuples(left.sortKeys, right.sortKeys, query.orderBy))
+    }
+    let rows = entries.map((entry) => entry.row)
+    if (query.distinct) {
+        rows = distinctRows(rows)
+    }
+    return rows
+}
+
+function identityToken(identity: unknown, ids: Map<unknown, number>): number {
+    const existing = ids.get(identity)
+    if (existing !== undefined) {
+        return existing
+    }
+    const id = ids.size
+    ids.set(identity, id)
+    return id
+}
+
+async function computeAggregate<N>(
+    item: AggregateItem,
+    adapter: GraphAdapter<N>,
+    members: Binding<N>[],
+): Promise<ScalarValue> {
+    const { func, arg } = item
+    if (func === "count") {
+        if (arg.kind === "star") {
+            return members.length
+        }
+        if (arg.kind === "variable") {
+            return members.filter((member) => member.vars.get(arg.variable) !== undefined).length
+        }
+        let count = 0
+        for (const member of members) {
+            const node = member.vars.get(arg.variable)
+            if (node !== undefined && (await adapter.getProperty(node, arg.property)) !== null) {
+                count++
             }
-            const node = binding.vars.get(item.variable)
-            if (node === undefined) {
-                throw new BadRequestError(`Unknown variable "${item.variable}" in RETURN`, {
-                    hint: "Use a variable that is bound in the MATCH pattern.",
-                })
-            }
+        }
+        return count
+    }
+    if (arg.kind !== "property") {
+        throw new BadRequestError(`${func}() requires a property argument`)
+    }
+    const values: number[] = []
+    for (const member of members) {
+        const node = member.vars.get(arg.variable)
+        if (node === undefined) {
+            continue
+        }
+        const value = await adapter.getProperty(node, arg.property)
+        if (typeof value === "number") {
+            values.push(value)
+        }
+    }
+    if (func === "sum") {
+        return values.reduce((total, value) => total + value, 0)
+    }
+    if (values.length === 0) {
+        return null
+    }
+    if (func === "min") {
+        return Math.min(...values)
+    }
+    if (func === "max") {
+        return Math.max(...values)
+    }
+    return values.reduce((total, value) => total + value, 0) / values.length
+}
+
+function orderValuesFromRow(orderBy: OrderItem[], row: Row): ScalarValue[] {
+    const values: ScalarValue[] = []
+    for (const item of orderBy) {
+        const key = item.key
+        let rowKey: string
+        if (key.kind === "aggregate") {
+            rowKey = key.alias
+        } else if (key.kind === "property") {
+            rowKey = `${key.variable}.${key.property}`
+        } else {
+            throw new BadRequestError(
+                "ORDER BY in an aggregating query must reference a grouping key or aggregate",
+                { hint: "Order by a returned property or aggregate, e.g. ORDER BY count(n) DESC." },
+            )
+        }
+        if (!(rowKey in row)) {
+            throw new BadRequestError(
+                `ORDER BY "${rowKey}" must appear in RETURN for an aggregating query`,
+                { hint: "Add the expression to RETURN, or order by a returned item." },
+            )
+        }
+        values.push(coerceScalar(row[rowKey]))
+    }
+    return values
+}
+
+async function evaluateAggregate<N>(
+    query: Query,
+    adapter: GraphAdapter<N>,
+    bindings: Binding<N>[],
+): Promise<Row[]> {
+    const groupingItems = query.returns.filter(
+        (item): item is Exclude<ReturnItem, AggregateItem> => item.kind !== "aggregate",
+    )
+    const aggregateItems = query.returns.filter(
+        (item): item is AggregateItem => item.kind === "aggregate",
+    )
+    const identityIds = new Map<unknown, number>()
+    const groups = new Map<string, { first: Binding<N>; members: Binding<N>[] }>()
+    const order: string[] = []
+
+    for (const binding of bindings) {
+        const parts: string[] = []
+        for (const item of groupingItems) {
             if (item.kind === "variable") {
-                row[item.variable] = await adapter.serialize(node)
-            } else {
+                const node = requireNode(binding, item.variable, "RETURN")
+                parts.push(`o:${identityToken(adapter.identity(node), identityIds)}`)
+            } else if (item.kind === "property") {
+                const node = requireNode(binding, item.variable, "RETURN")
+                parts.push(`s:${JSON.stringify(await adapter.getProperty(node, item.property))}`)
+            }
+        }
+        const key = parts.join("|")
+        const existing = groups.get(key)
+        if (existing === undefined) {
+            groups.set(key, { first: binding, members: [binding] })
+            order.push(key)
+        } else {
+            existing.members.push(binding)
+        }
+    }
+
+    const rows: Row[] = []
+    for (const key of order) {
+        const group = groups.get(key)
+        if (group === undefined) {
+            continue
+        }
+        const row: Row = {}
+        for (const item of groupingItems) {
+            if (item.kind === "variable") {
+                row[item.variable] = await adapter.serialize(
+                    requireNode(group.first, item.variable, "RETURN"),
+                )
+            } else if (item.kind === "property") {
                 row[`${item.variable}.${item.property}`] = await adapter.getProperty(
-                    node,
+                    requireNode(group.first, item.variable, "RETURN"),
                     item.property,
                 )
             }
         }
+        for (const item of aggregateItems) {
+            row[item.alias] = await computeAggregate(item, adapter, group.members)
+        }
         rows.push(row)
     }
     return rows
+}
+
+/** AST を GraphAdapter 越しに評価し、結果行を返す（集計・DISTINCT・ORDER BY・SKIP・LIMIT を適用）。 */
+export async function evaluate<N>(query: Query, adapter: GraphAdapter<N>): Promise<Row[]> {
+    const bindings = await matchBindings(query, adapter)
+    const hasAggregate = query.returns.some((item) => item.kind === "aggregate")
+
+    let rows: Row[]
+    if (hasAggregate) {
+        rows = await evaluateAggregate(query, adapter, bindings)
+        if (query.orderBy.length > 0) {
+            const entries = rows.map((row) => ({
+                row,
+                sortKeys: orderValuesFromRow(query.orderBy, row),
+            }))
+            entries.sort((left, right) =>
+                compareTuples(left.sortKeys, right.sortKeys, query.orderBy),
+            )
+            rows = entries.map((entry) => entry.row)
+        }
+        if (query.distinct) {
+            rows = distinctRows(rows)
+        }
+    } else {
+        rows = await evaluateSimple(query, adapter, bindings)
+    }
+
+    return sliceRange(rows, query.skip, query.limit)
 }
