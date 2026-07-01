@@ -7,9 +7,13 @@
         ".": "./src/index.ts"
     },
     "scripts": {
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run"
     },
     "dependencies": {
         "@live-connector/error": "workspace:*"
+    },
+    "devDependencies": {
+        "vitest": "^4.1.9"
     }
 }
