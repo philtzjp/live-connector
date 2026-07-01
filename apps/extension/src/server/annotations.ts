@@ -66,6 +66,8 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     move_clip: NEUTRAL_WRITE,
     trim_clip: NEUTRAL_WRITE,
     batch: NEUTRAL_WRITE,
+    // 一時トラックで試行し即削除する検証ツール（Set に残留せず、再実行で同結果）
+    verify_device_catalog: IDEMPOTENT_WRITE,
 }
 
 type RegisterConfig = Record<string, unknown>

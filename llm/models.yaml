@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.14.0"
+            value: "2.15.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.14.0"
+            value: "2.15.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.14.0"
+            value: "2.15.0"
           - name: "description"
             type: "string"
             required: true
@@ -1313,6 +1313,21 @@ mcp_tools:
               input: "select(ClipSlot with clip), preview?, confirm?"
               sdk: "ClipSlot.deleteClip()"
 
+    - name: "verify_device_catalog"
+      source: "apps/extension/src/tools/catalog.ts"
+      note: "内蔵デバイスカタログ全項目を一時 MidiTrack へ挿入試行し可否一覧を返す。各デバイス即削除・一時トラック最後に削除で Set 無残留。実行は Live 実機が必要。結果記録先は llm/device-catalog.md。"
+      input: null
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"ok\""
+                  total: "number"
+                  insertable: "number"
+                  failed: "number"
+                  failedNames: "string[]"
+                  results: "{ name: string, insertable: boolean, error?: string }[]"
+
     - name: "insert_device"
       source: "apps/extension/src/tools/devices.ts"
       note: "Track.insertDevice で内蔵 Live デバイスを挿入する。内蔵デバイスのデフォルトプリセットのみ対応し、サードパーティプラグインや .adv/.adg などのプリセットファイルは挿入できない。SDK にデバイス列挙 API が無いため、失敗時に内蔵デバイス名カタログを validDeviceNames として返す。"
@@ -1945,7 +1960,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.14.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.15.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"

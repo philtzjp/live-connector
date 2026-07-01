@@ -67,7 +67,7 @@ const BUILT_IN_DEVICE_CATALOG = {
     midiEffects: ["Arpeggiator", "Chord", "Scale", "Note Length", "Pitch", "Random", "Velocity"],
 } as const
 
-const CATALOG_DEVICE_NAMES: string[] = [
+export const CATALOG_DEVICE_NAMES: string[] = [
     ...BUILT_IN_DEVICE_CATALOG.instruments,
     ...BUILT_IN_DEVICE_CATALOG.audioEffects,
     ...BUILT_IN_DEVICE_CATALOG.midiEffects,
