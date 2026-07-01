@@ -264,3 +264,4 @@ flowchart LR
 - Cypher サブセットは `MATCH ... [WHERE ...] RETURN ... [LIMIT n]`、有向 relationship、可変長 hop、基本比較演算を対象にする。
 - `LomGraphAdapter.seeds()` で開始できるラベルは `Song` / `Track` family / `Clip` family / `Device` family / `Scene` / `CuePoint` である。
 - `ableton-sdk/` は外部配布物であり、workspace には同梱しない。
+- SDK は Live Set の名称・ファイルパスを公開しない（`Environment` は language / storageDirectory / tempDirectory のみ、`Song` / `Application` に name / path getter は無い）。接続先の変化は `get_overview` / `/health` の構造ダイジェストと `songHandle` の変化で検知する。push 型のイベント通知は SDK 非対応。
