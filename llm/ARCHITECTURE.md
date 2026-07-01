@@ -155,7 +155,16 @@ sequenceDiagram
 | `delete_arrangement_clip` | write | 1 つの arrangement Clip を削除する |
 | `create_cue_point` | write | time 指定で CuePoint を作成し、任意で `name` を設定する |
 | `delete_cue_point` | write | 1 つの CuePoint を削除する |
-| `create_clip` | write | 空の MidiTrack ClipSlot に指定 length の空 MidiClip を生成する |
+| `create_clip` | write | 空の ClipSlot にセッションクリップを生成する（MidiTrack は length で空 MidiClip、AudioTrack は audioFilePath で AudioClip） |
+| `create_scene` | write | index 指定で空の Scene を作成する |
+| `delete_scene` | write | 1 つの Scene を削除する（confirm 必須） |
+| `duplicate_scene` | write | 1 つの Scene を複製する |
+| `delete_track` | write | 1 つの regular Track を削除する（confirm 必須、return/main 不可） |
+| `duplicate_track` | write | 1 つの regular Track を複製する |
+| `delete_device` | write | 1 つの Device を親 Track/Chain から削除する（confirm 必須） |
+| `duplicate_device` | write | 1 つの Device を複製する |
+| `delete_session_clip` | write | 1 つの ClipSlot のセッションクリップを削除する（confirm 必須） |
+| `transform_notes` | write | 1 つの MidiClip の notes を決定的変換する（transpose/shift/velocity/quantize/duplicate） |
 | `set_song` | write | Song の `tempo` を書き込む |
 | `set_track` | write | Track の `name` / `arm` / `mute` / `solo` を書き込む |
 | `set_clip` | write | Clip / AudioClip の mutable property を書き込む |

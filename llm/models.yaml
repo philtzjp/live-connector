@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.7.0"
+            value: "2.8.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.7.0"
+            value: "2.8.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.7.0"
+            value: "2.8.0"
           - name: "description"
             type: "string"
             required: true
@@ -1140,6 +1140,7 @@ mcp_tools:
 
     - name: "create_clip"
       source: "apps/extension/src/tools/create.ts"
+      note: "MidiTrack の ClipSlot は length で空 MidiClip、AudioTrack の ClipSlot は audioFilePath で AudioClip を生成する。"
       input:
           select:
               type: "string"
@@ -1147,8 +1148,13 @@ mcp_tools:
               contract: "空の ClipSlot を単一ノード変数で RETURN する Cypher。プロパティ射影・複数変数は不可。"
           length:
               type: "number"
-              required: true
+              required: false
               constraints: ["positive"]
+              note: "MidiTrack の ClipSlot で必須。"
+          audioFilePath:
+              type: "string"
+              required: false
+              note: "AudioTrack の ClipSlot で必須。"
           preview:
               type: "boolean"
               required: false
@@ -1172,6 +1178,36 @@ mcp_tools:
                           startTime: "number"
                           endTime: "number"
                           noteCount: "number"
+
+    - name: "structure_tools"
+      source: "apps/extension/src/tools/structure.ts"
+      note: "SDK の構造操作をツール化。破壊操作（delete_*）は preview で対象確認、confirm:true で実行（guardDestructive）。"
+      tools:
+          create_scene:
+              input: "index?: number>=0, name?: string, preview?: boolean"
+              sdk: "Song.createScene(index)"
+          delete_scene:
+              input: "select(Scene), preview?, confirm?"
+              sdk: "Song.deleteScene(scene)"
+          duplicate_scene:
+              input: "select(Scene), preview?"
+              sdk: "Song.duplicateScene(scene)"
+          delete_track:
+              input: "select(regular Track), preview?, confirm?"
+              sdk: "Song.deleteTrack(track)"
+              note: "return / main は不可。"
+          duplicate_track:
+              input: "select(regular Track), preview?"
+              sdk: "Song.duplicateTrack(track)"
+          delete_device:
+              input: "select(Device), preview?, confirm?"
+              sdk: "Track.deleteDevice / Chain.deleteDevice（device.parent）"
+          duplicate_device:
+              input: "select(Device), preview?"
+              sdk: "Track.duplicateDevice / Chain.duplicateDevice"
+          delete_session_clip:
+              input: "select(ClipSlot with clip), preview?, confirm?"
+              sdk: "ClipSlot.deleteClip()"
 
     - name: "insert_device"
       source: "apps/extension/src/tools/devices.ts"
@@ -1805,7 +1841,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.7.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.8.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
