@@ -4,6 +4,7 @@ import { registerArrangementTools } from "../tools/arrangement"
 import { registerAudioTools } from "../tools/audio"
 import { registerCreateTools } from "../tools/create"
 import { registerDeviceTools } from "../tools/devices"
+import { registerHistoryTool, withWriteHistory } from "../tools/history"
 import { registerNotesTool } from "../tools/notes"
 import { registerOverviewTool } from "../tools/overview"
 import { registerPresetTools } from "../tools/presets"
@@ -37,6 +38,7 @@ function registerAllTools(server: McpServer, deps: ServerDeps): void {
     registerTransformNotesTool(server, deps)
     registerStructureTools(server, deps)
     registerSampleTools(server, deps)
+    registerHistoryTool(server, deps)
 }
 
 /** ソート済みツール名から安定した短いダイジェスト（djb2, 8 桁 hex）を導出する。 */
@@ -52,7 +54,8 @@ function toolsDigest(names: string[]): string {
 /** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
 export function createMcpServer(deps: ServerDeps): McpServer {
     const server = new McpServer({ name: "live-connector", version: SERVICE_VERSION })
-    registerAllTools(server, deps)
+    // 書き込みツールのハンドラを履歴記録でラップする facade を通して登録する。
+    registerAllTools(withWriteHistory(server, deps), deps)
     return server
 }
 
