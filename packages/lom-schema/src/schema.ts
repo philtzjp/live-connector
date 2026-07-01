@@ -95,6 +95,7 @@ export const query_contract: QueryContract = {
             'MATCH (c:CuePoint {name:"Verse"}) RETURN c',
             'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
             'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(d:Device {name:"Operator"}) RETURN d',
+            'MATCH (:Track {name:"Drums"})-[:HAS_MIXER]->(:Mixer)-[:HAS_PAN]->(p:Parameter) RETURN p',
         ],
         invalid_examples: [
             "MATCH (t:Track) RETURN t.name",
@@ -296,4 +297,6 @@ export const EXAMPLE_QUERIES: string[] = [
     "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n",
     "MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN c.name, count(n), max(n.pitch) ORDER BY count(n) DESC",
     "MATCH (t:Track)-[:HAS_ARRANGEMENT_CLIP]->(c:Clip) RETURN c.name, c.startTime ORDER BY c.startTime SKIP 0 LIMIT 20",
+    'MATCH (:Track {name:"Drums"})-[:HAS_MIXER]->(:Mixer)-[:HAS_VOLUME]->(p:Parameter) RETURN p.value, p.min, p.max',
+    'MATCH (:Track {name:"Drums"})-[:HAS_MIXER]->(:Mixer)-[:HAS_SEND]->(p:Parameter) RETURN p.name, p.value',
 ]
