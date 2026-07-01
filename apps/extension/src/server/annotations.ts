@@ -31,6 +31,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     search_presets: READ_ONLY,
     get_write_history: READ_ONLY,
     list_snapshots: READ_ONLY,
+    get_render_job: READ_ONLY,
     // file side effects, no Set mutation
     render_audio: SIDE_EFFECT_FILE,
     save_device_state: SIDE_EFFECT_FILE,

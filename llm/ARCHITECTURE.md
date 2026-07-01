@@ -151,7 +151,8 @@ sequenceDiagram
 | `query` | read | Cypher サブセットを parse/evaluate して行集合を返す |
 | `get_write_history` | read | 書き込みツールの実行履歴（時刻・ツール名・入力要約・結果）を新しい順に取得する |
 | `verify_device_catalog` | test | 内蔵デバイスカタログ全項目を一時トラックへ挿入試行し挿入可否一覧を返す（Set に残留しない） |
-| `render_audio` | read/render | 1 つの AudioTrack の arrangement pre-FX 音声を WAV にレンダリングしてパスを返す |
+| `render_audio` | read/render | 1 つの AudioTrack の arrangement pre-FX 音声を WAV にレンダリングする（同期で filePath、または background:true で jobId） |
+| `get_render_job` | read | background render の状態（running/done/error）を jobId で照会する |
 | `search_presets` | read/fs | 指定 root 配下のプリセット候補ファイルを列挙する。適用は行わない |
 | `create_arrangement_clip` | write | 1 つの MidiTrack / AudioTrack に arrangement Clip を startTime/duration 指定で作成する |
 | `delete_arrangement_clip` | write | 1 つの arrangement Clip を削除する |
