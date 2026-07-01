@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.10.0"
+            value: "2.11.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.10.0"
+            value: "2.11.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.10.0"
+            value: "2.11.0"
           - name: "description"
             type: "string"
             required: true
@@ -826,6 +826,32 @@ mcp_tools:
                   hint:
                       optional: true
                       type: "string"
+
+    - name: "get_write_history"
+      source: "apps/extension/src/tools/history.ts"
+      note: "withWriteHistory facade が status:ok の書き込みのみ storageDirectory/history/write-history.jsonl へ JSONL 記録。ホスト再起動をまたいで参照可。上限超過は末尾 MAX_HISTORY_ENTRIES(1000) へローテーション。"
+      input:
+          limit:
+              type: "number"
+              required: false
+              default: 50
+              constraints: ["integer", "positive", "<= 500"]
+          since:
+              type: "string"
+              required: false
+              note: "ISO 時刻。以降（含む）に絞る。"
+          until:
+              type: "string"
+              required: false
+              note: "ISO 時刻。以前（含む）に絞る。"
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  count: "number"
+                  total: "number"
+                  truncated: "boolean"
+                  entries: "HistoryEntry[] { at: string, tool: string, input: object, result: object }"
 
     - name: "render_audio"
       source: "apps/extension/src/tools/audio.ts"
@@ -1873,7 +1899,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.10.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.11.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"

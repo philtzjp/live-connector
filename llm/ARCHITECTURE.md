@@ -149,6 +149,7 @@ sequenceDiagram
 | `schema` | read | `LOM_SCHEMA` と `EXAMPLE_QUERIES` を返す |
 | `get_overview` | read | tempo、scale、track 概要、アレンジクリップ、CuePoint、scene/cue count を返す |
 | `query` | read | Cypher サブセットを parse/evaluate して行集合を返す |
+| `get_write_history` | read | 書き込みツールの実行履歴（時刻・ツール名・入力要約・結果）を新しい順に取得する |
 | `render_audio` | read/render | 1 つの AudioTrack の arrangement pre-FX 音声を WAV にレンダリングしてパスを返す |
 | `search_presets` | read/fs | 指定 root 配下のプリセット候補ファイルを列挙する。適用は行わない |
 | `create_arrangement_clip` | write | 1 つの MidiTrack / AudioTrack に arrangement Clip を startTime/duration 指定で作成する |
@@ -252,6 +253,10 @@ flowchart LR
 ```
 
 `llm/models.yaml` は実装の代替ではなく、LLM が参照するモデル目録である。TypeScript 型や zod schema を変更した場合は、対応する項目を更新する。
+
+## 書き込み履歴
+
+`createMcpServer` は `withWriteHistory` facade を通してツールを登録する。facade は `WRITE_HISTORY_TOOLS` に含まれる書き込みツールのハンドラをラップし、結果が `status:"ok"` の実書き込みのみ `environment.storageDirectory/history/write-history.jsonl` へ JSONL 追記する（preview / confirm_required / error は記録しない）。ツール名は変えないため `tools/list` と `describeRegisteredTools` に影響しない。`get_write_history` は件数・時刻範囲でこの履歴を取得し、ホスト再起動をまたいで参照できる。上限（`MAX_HISTORY_BYTES`）超過時は末尾 `MAX_HISTORY_ENTRIES` 件へローテーションする。
 
 ## 現在の制約
 
