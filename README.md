@@ -71,6 +71,19 @@ RETURN p.value, p.min, p.max
 - Ableton Extensions SDK v1.0.0-beta.0 には Browser API がないため、`.adv` / `.adg` / third-party plug-in のネイティブプリセットを Live へ直接読み込むことはできません。
 - third-party plug-in の非公開内部状態や波形選択は保存・復元できません。`save_device_state` / `apply_device_state` の対象は SDK から見える host 公開パラメータに限定されます。
 
+## 開発
+
+モノレポは pnpm + Turborepo で管理します。主なコマンド:
+
+```sh
+pnpm typecheck   # 全パッケージの型チェック
+pnpm test        # vitest によるユニットテスト（実機・Ableton SDK 実体なしで完走）
+pnpm lint        # Biome によるリント
+pnpm format      # Biome によるフォーマット
+```
+
+`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / selectNodes）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによるツール層）を検証します。cypher の評価器はフェイク `GraphAdapter` で駆動し、SDK 非依存で回帰を固定します。`typecheck` と `test` は lefthook の `pre-push` で実行します。
+
 ## ライセンス
 
 本リポジトリの自作コード・ドキュメント・アセットは [MIT](./LICENSE) です。

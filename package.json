@@ -12,6 +12,7 @@
         "build": "turbo run build",
         "package": "turbo run package",
         "typecheck": "turbo run typecheck",
+        "test": "turbo run test",
         "format": "biome format --write .",
         "lint": "biome check ."
     },
