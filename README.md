@@ -70,6 +70,7 @@ RETURN p.value, p.min, p.max
 - v2.0.0 で `localhost:7799` が起動しない場合は、v2.0.1 以降の `.ablx` に更新してください。
 - Ableton Extensions SDK v1.0.0-beta.0 には Browser API がないため、`.adv` / `.adg` / third-party plug-in のネイティブプリセットを Live へ直接読み込むことはできません。
 - third-party plug-in の非公開内部状態や波形選択は保存・復元できません。`save_device_state` / `apply_device_state` の対象は SDK から見える host 公開パラメータに限定されます。
+- SDK には MIDI 楽器トラックの合成出力を audio 化する手段（render / freeze / resample）がありません。`render_audio` は AudioTrack の pre-FX 音声のみ対象です。MIDI 楽器の実音を検証するには、Live 上で対象トラックを AudioTrack へ手動で resample / freeze してから `render_audio` を適用します（詳細は `llm/midi-audition.md`）。
 
 ## 開発
 
