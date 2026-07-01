@@ -38,6 +38,11 @@ export type RelationshipDef = {
 export type QueryContract = {
     grammar: string
     start_labels: string[]
+    /** LOM の 2 系統の時刻座標。混同するとノートが意図しない位置に配置される。 */
+    time_coordinates: {
+        absolute: string
+        relative: string
+    }
     read: {
         tool: string
         return_contract: string
