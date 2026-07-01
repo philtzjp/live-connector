@@ -74,6 +74,7 @@ export const query_contract: QueryContract = {
             "save_device_state",
             "apply_device_state",
             "write_notes",
+            "transform_notes",
         ],
         return_contract:
             "単一対象ツールの select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。",

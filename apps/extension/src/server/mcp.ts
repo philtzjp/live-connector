@@ -9,6 +9,7 @@ import { registerOverviewTool } from "../tools/overview"
 import { registerPresetTools } from "../tools/presets"
 import { registerQueryTool } from "../tools/query"
 import { registerSchemaTool } from "../tools/schema"
+import { registerTransformNotesTool } from "../tools/transform-notes"
 import { registerWriteTools } from "../tools/write"
 import { SERVICE_VERSION } from "../version"
 
@@ -31,6 +32,7 @@ function registerAllTools(server: McpServer, deps: ServerDeps): void {
     registerPresetTools(server, deps)
     registerWriteTools(server, deps)
     registerNotesTool(server, deps)
+    registerTransformNotesTool(server, deps)
 }
 
 /** ソート済みツール名から安定した短いダイジェスト（djb2, 8 桁 hex）を導出する。 */
