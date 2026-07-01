@@ -42,6 +42,7 @@ export const WRITE_HISTORY_TOOLS = new Set<string>([
     "load_sample",
     "apply_device_state",
     "restore_snapshot",
+    "batch",
 ])
 
 export type HistoryEntry = {

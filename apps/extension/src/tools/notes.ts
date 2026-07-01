@@ -7,7 +7,7 @@ import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
 import { captureNotesSnapshot } from "./snapshots"
 
-const noteSchema = z.object({
+export const noteSchema = z.object({
     pitch: z.number().int().min(0).max(127),
     startTime: z.number().min(0),
     duration: z.number().positive(),
@@ -18,7 +18,7 @@ const noteSchema = z.object({
     velocityDeviation: z.number().optional(),
 })
 
-type NoteInput = z.infer<typeof noteSchema>
+export type NoteInput = z.infer<typeof noteSchema>
 
 type NoteStartTime = { startTime: number }
 
@@ -75,7 +75,7 @@ function selectDescription(): string {
     return 'MidiClip を単一ノード変数で RETURN する Cypher。query のようなプロパティ射影（RETURN c.name）や複数変数（RETURN t, c）は不可。例: MATCH (c:MidiClip {name:"Bass"}) RETURN c'
 }
 
-function toNoteDescription(input: NoteInput): NoteDescription {
+export function toNoteDescription(input: NoteInput): NoteDescription {
     const note: NoteDescription = {
         pitch: input.pitch,
         startTime: input.startTime,

@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { ServerDeps } from "../deps"
 import { registerArrangementTools } from "../tools/arrangement"
 import { registerAudioTools } from "../tools/audio"
+import { registerBatchTool } from "../tools/batch"
 import { registerCreateTools } from "../tools/create"
 import { registerDeviceTools } from "../tools/devices"
 import { registerHistoryTool, withWriteHistory } from "../tools/history"
@@ -41,6 +42,7 @@ function registerAllTools(server: McpServer, deps: ServerDeps): void {
     registerSampleTools(server, deps)
     registerHistoryTool(server, deps)
     registerSnapshotTools(server, deps)
+    registerBatchTool(server, deps)
 }
 
 /** ソート済みツール名から安定した短いダイジェスト（djb2, 8 桁 hex）を導出する。 */
