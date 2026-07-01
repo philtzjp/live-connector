@@ -180,6 +180,10 @@ sequenceDiagram
 | `restore_snapshot` | write | snapshotId を指定して set_* / write_notes の変更前の値へ書き戻す |
 | `list_snapshots` | read | 保存済みスナップショット（id / 時刻 / ツール / 種別 / select）を新しい順に取得する |
 
+## MCP メタデータ
+
+`createMcpServer` は initialize 応答の `instructions` に運用規約の要約（推奨手順 schema→query→preview→confirm、時刻座標の 2 系統、ガードレール、ミキサー Parameter 経路）を設定する。ツールには `withToolAnnotations` facade で `TOOL_ANNOTATIONS`（`apps/extension/src/server/annotations.ts`）に基づく annotations を注入する: read 系は `readOnlyHint`、`delete_*` は `destructiveHint`、`set_*` / `apply_device_state` / `restore_snapshot` は `idempotentHint`。facade はツール名・ハンドラを変えないため `tools/list` と `describeRegisteredTools` に影響しない。ミキサーの volume / panning / send は `(Track)-[:HAS_MIXER]->(Mixer)-[:HAS_VOLUME|HAS_PAN|HAS_SEND]->(Parameter)` として `set_device_parameter` で書き込む（`set_track` へ直接追加しない設計）。
+
 ## 読み取りフロー
 
 ```mermaid
