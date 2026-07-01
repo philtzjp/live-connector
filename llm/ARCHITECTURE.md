@@ -176,6 +176,7 @@ sequenceDiagram
 | `apply_device_state` | write/fs | 保存済み DeviceParameter 値を 1 つの Device の同名パラメータへ再適用する |
 | `load_sample` | write/fs | 1 つの Simpler に importIntoProject + replaceSample でオーディオを読み込む |
 | `write_notes` | write | 1 つの MidiClip の notes を replace / merge / clear_range する |
+| `batch` | write | 複数の書き込み（set_* / write_notes）を 1 つの undo ステップで実行する |
 | `restore_snapshot` | write | snapshotId を指定して set_* / write_notes の変更前の値へ書き戻す |
 | `list_snapshots` | read | 保存済みスナップショット（id / 時刻 / ツール / 種別 / select）を新しい順に取得する |
 
@@ -235,6 +236,10 @@ sequenceDiagram
 ```
 
 単一対象ツールの `select` は対象ノード集合を解決する selector であり、`RETURN` は単一ノード変数に限定される。`render_audio` はちょうど 1 つの `AudioTrack` を要求し、指定 beat 範囲の arrangement pre-FX 音声を WAV として生成する。`create_arrangement_clip` はちょうど 1 つの `MidiTrack` または `AudioTrack` を要求し、arrangement timeline に `startTime` / `duration` 指定で clip を作成する。`delete_arrangement_clip` は `HAS_ARRANGEMENT_CLIP` で辿れる clip だけを削除し、session clip は対象外とする。`create_cue_point` / `delete_cue_point` は Song の CuePoint を作成・削除する。`create_clip` はちょうど 1 つの空 `ClipSlot` を要求し、親が `MidiTrack` である場合のみ空 `MidiClip` を生成する。`set_*` は対象件数が `CONFIRM_THRESHOLD` を超える場合に `confirm:true` を要求する。`set_cue_point` は `CuePoint.name` を書き込む。`save_device_state` / `apply_device_state` はちょうど 1 つの `Device` を要求し、公開 `DeviceParameter` の値だけを JSON 保存・再適用する。`write_notes` はちょうど 1 つの `MidiClip` を要求し、notes を replace する。
+
+## 一括書き込み（batch）
+
+`ExtensionContext.withinTransaction(fn)` はネストすると最外へ統合され 1 undo ステップになるが、コールバックは同期でなければならず（内部で await 不可）、`Promise.all([...])` を返すことで複数の非同期ミューテーションを 1 ステップにまとめる。この制約から `batch` は「全ステップの対象を先に非同期で解決・検証（all-or-nothing）→ 全ミューテーションを 1 つの同期 `withinTransaction` コールバック内で初期化」する。対象は `set_*` と `write_notes` のように「解決後に同期適用できる」書き込みに限る。同期コールバック内で await できないため、後続ステップは同一 batch 内で先行ステップが作成したオブジェクトを参照できず、構造操作（create / delete / duplicate）は本ツールの対象外。いずれかのステップが解決・検証に失敗した場合は何も適用せず失敗ステップを返す。
 
 ## 巻き戻し（スナップショット）
 
