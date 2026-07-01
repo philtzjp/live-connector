@@ -10,10 +10,17 @@ import { registerPresetTools } from "../tools/presets"
 import { registerQueryTool } from "../tools/query"
 import { registerSchemaTool } from "../tools/schema"
 import { registerWriteTools } from "../tools/write"
+import { SERVICE_VERSION } from "../version"
 
-/** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
-export function createMcpServer(deps: ServerDeps): McpServer {
-    const server = new McpServer({ name: "live-connector", version: "2.1.0" })
+/** 登録ツール構成のサマリ。/health で稼働ホストのツール構成を外形確認するために使う。 */
+export type RegisteredToolsSummary = {
+    count: number
+    digest: string
+    names: string[]
+}
+
+/** すべての MCP ツールを登録する（createMcpServer と describeRegisteredTools で共通の登録経路）。 */
+function registerAllTools(server: McpServer, deps: ServerDeps): void {
     registerSchemaTool(server, deps)
     registerOverviewTool(server, deps)
     registerQueryTool(server, deps)
@@ -24,5 +31,37 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     registerPresetTools(server, deps)
     registerWriteTools(server, deps)
     registerNotesTool(server, deps)
+}
+
+/** ソート済みツール名から安定した短いダイジェスト（djb2, 8 桁 hex）を導出する。 */
+function toolsDigest(names: string[]): string {
+    const joined = names.join(",")
+    let hash = 5381
+    for (let index = 0; index < joined.length; index++) {
+        hash = ((hash << 5) + hash + joined.charCodeAt(index)) >>> 0
+    }
+    return hash.toString(16).padStart(8, "0")
+}
+
+/** ツールを登録した MCP サーバーを生成する（リクエストごとに生成し、共有 deps を閉じ込める）。 */
+export function createMcpServer(deps: ServerDeps): McpServer {
+    const server = new McpServer({ name: "live-connector", version: SERVICE_VERSION })
+    registerAllTools(server, deps)
     return server
+}
+
+/**
+ * 実際の登録経路をたどって登録ツール名を収集する（ハンドラは実行しない）。
+ * createMcpServer と同一の register* を通すため、ツール構成と乖離しない。
+ */
+export function describeRegisteredTools(deps: ServerDeps): RegisteredToolsSummary {
+    const names: string[] = []
+    const collector = {
+        registerTool(name: string) {
+            names.push(name)
+        },
+    } as unknown as McpServer
+    registerAllTools(collector, deps)
+    names.sort((left, right) => left.localeCompare(right))
+    return { count: names.length, digest: toolsDigest(names), names }
 }

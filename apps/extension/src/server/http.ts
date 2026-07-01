@@ -13,11 +13,11 @@ import {
 } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import type { ServerDeps } from "../deps"
-import { createMcpServer } from "./mcp"
+import { SERVICE_VERSION } from "../version"
+import { createMcpServer, describeRegisteredTools } from "./mcp"
 
 const MCP_PATH = "/api/v1/mcp"
 const HEALTH_PATH = "/health"
-const SERVICE_VERSION = "2.1.0"
 const MAX_BODY_BYTES = 1024 * 1024
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"])
 
@@ -197,7 +197,11 @@ async function closeMcpSession(
     }
 }
 
-function handleHealth(request: IncomingMessage, response: ServerResponse): void {
+function handleHealth(
+    context: RequestContext,
+    request: IncomingMessage,
+    response: ServerResponse,
+): void {
     if (request.method !== "GET") {
         writeProblem(
             response,
@@ -205,10 +209,12 @@ function handleHealth(request: IncomingMessage, response: ServerResponse): void 
         )
         return
     }
+    const tools = describeRegisteredTools(context.deps)
     writeJson(response, 200, "application/health+json", {
         status: "pass",
         version: SERVICE_VERSION,
         description: "live-connector MCP server",
+        tools,
     })
 }
 
@@ -270,7 +276,7 @@ async function routeRequest(
 ): Promise<void> {
     const path = requestPath(request, context.env)
     if (path === HEALTH_PATH) {
-        handleHealth(request, response)
+        handleHealth(context, request, response)
         return
     }
     if (path === MCP_PATH) {

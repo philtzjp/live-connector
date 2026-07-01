@@ -5,6 +5,23 @@ import type { ExtensionManifest } from "./src/types/manifest"
 const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8")) as ExtensionManifest
 const production = process.argv.includes("--production")
 
+// バージョンの正本はリポジトリルートの VERSION。manifest.json / package.json と一致していることを
+// 検証し、値をバンドルへ注入する（http.ts / mcp.ts の手書きリテラルを排除する）。
+const version = fs.readFileSync("../../VERSION", "utf8").trim()
+const packageVersion = (
+    JSON.parse(fs.readFileSync("package.json", "utf8")) as { version?: unknown }
+).version
+if (manifest.version !== version) {
+    throw new Error(
+        `manifest.json version "${manifest.version}" does not match VERSION "${version}"`,
+    )
+}
+if (packageVersion !== version) {
+    throw new Error(
+        `package.json version "${String(packageVersion)}" does not match VERSION "${version}"`,
+    )
+}
+
 // Extension Host の VM コンテキストには AbortSignal などの Web globals が存在しない。
 // ただし Host 外側の Node ランタイムには存在するため、どのモジュール初期化よりも先に
 // banner で外側の globalThis からコピーする（inject では undici 読み込み順に間に合わない）。
@@ -58,7 +75,7 @@ await esbuild.build({
     // Extension Host は bundle を vm コンテキストで評価する。
     // - `global` が無いため globalThis に置換。
     // - 動的 import() は vm で使えない（callback 未指定エラー）ため require ベースへ変換。
-    define: { global: "globalThis" },
+    define: { global: "globalThis", __LIVE_CONNECTOR_VERSION__: JSON.stringify(version) },
     supported: { "dynamic-import": false },
     sourcesContent: false,
     logLevel: "info",
