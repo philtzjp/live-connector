@@ -9,6 +9,7 @@
         "build:production": "tsx build.ts --production",
         "package": "pnpm run build:production && tsx package.ts",
         "typecheck": "tsc --noEmit",
+        "test": "vitest run",
         "start": "tsx build.ts && extensions-cli run"
     },
     "dependencies": {
@@ -29,6 +30,7 @@
     "devDependencies": {
         "@ableton-extensions/cli": "file:../../ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz",
         "esbuild": "^0.28.1",
-        "tsx": "^4.22.4"
+        "tsx": "^4.22.4",
+        "vitest": "^4.1.9"
     }
 }
