@@ -13,6 +13,7 @@ source_files:
     runtime:
         - "apps/extension/src/extension.ts"
         - "apps/extension/src/deps.ts"
+        - "apps/extension/src/version.ts"
         - "apps/extension/src/server/http.ts"
         - "apps/extension/src/server/mcp.ts"
     tools:
@@ -121,7 +122,8 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.1.0"
+            value: "2.2.0"
+            note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
             required: true
@@ -132,11 +134,12 @@ models:
     - name: "ServiceVersion"
       kind: "version"
       source: "VERSION"
+      note: "配布バージョンの正本。http.ts / mcp.ts は手書きリテラルを持たず version.ts の SERVICE_VERSION（build 注入）を参照する。"
       fields:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.1.0"
+            value: "2.2.0"
 
     - name: "Env"
       kind: "configuration"
@@ -180,10 +183,27 @@ models:
             required: true
             value: "/api/v1/mcp"
 
+    - name: "RegisteredToolsSummary"
+      kind: "runtime_output"
+      source: "apps/extension/src/server/mcp.ts"
+      note: "describeRegisteredTools が createMcpServer と同一の register* 経路を辿って収集する。/health で公開する。"
+      fields:
+          - name: "count"
+            type: "number"
+            required: true
+          - name: "digest"
+            type: "string"
+            required: true
+            note: "ソート済みツール名の djb2 8 桁 hex ダイジェスト。"
+          - name: "names"
+            type: "string[]"
+            required: true
+
     - name: "HealthResponse"
       kind: "http_response"
       source: "apps/extension/src/server/http.ts"
       content_type: "application/health+json"
+      note: "認証なしエンドポイント。追加情報はバージョンとツール名の範囲に留める。"
       fields:
           - name: "status"
             type: "string"
@@ -192,11 +212,15 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.1.0"
+            value: "2.2.0"
           - name: "description"
             type: "string"
             required: true
             value: "live-connector MCP server"
+          - name: "tools"
+            type: "RegisteredToolsSummary"
+            required: true
+            note: "describeRegisteredTools(deps) の結果。稼働ホストのツール構成を外形確認する。"
 
     - name: "HttpEndpoint"
       kind: "http_contract"
@@ -1659,7 +1683,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.1.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.2.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
