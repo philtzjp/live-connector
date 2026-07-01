@@ -288,3 +288,4 @@ flowchart LR
 - `LomGraphAdapter.seeds()` で開始できるラベルは `Song` / `Track` family / `Clip` family / `Device` family / `Scene` / `CuePoint` である。
 - `ableton-sdk/` は外部配布物であり、workspace には同梱しない。
 - SDK は Live Set の名称・ファイルパスを公開しない（`Environment` は language / storageDirectory / tempDirectory のみ、`Song` / `Application` に name / path getter は無い）。接続先の変化は `get_overview` / `/health` の構造ダイジェストと `songHandle` の変化で検知する。push 型のイベント通知は SDK 非対応。
+- SDK に MIDI トラックの合成出力を audio 化する手段（render / freeze / resample / bounce）は無い。`render_audio`（`renderPreFxAudio`）は AudioTrack の pre-FX 音声のみ対象。MIDI 楽器の実音検証は手動 resample が前提（`llm/midi-audition.md`）。近似合成（notes→WAV）は本リポジトリの射程外として記録する。
