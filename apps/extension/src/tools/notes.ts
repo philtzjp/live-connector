@@ -8,14 +8,14 @@ import { LomGraphAdapter } from "../lom/adapter"
 import { captureNotesSnapshot } from "./snapshots"
 
 export const noteSchema = z.object({
-    pitch: z.number().int().min(0).max(127),
-    startTime: z.number().min(0),
-    duration: z.number().positive(),
-    velocity: z.number().min(0).max(127).optional(),
-    muted: z.boolean().optional(),
-    probability: z.number().min(0).max(1).optional(),
-    releaseVelocity: z.number().min(0).max(127).optional(),
-    velocityDeviation: z.number().optional(),
+    pitch: z.number().int().min(0).max(127).describe("MIDI ノート番号 0-127（60=C3）"),
+    startTime: z.number().min(0).describe("クリップ相対拍（beats、クリップ先頭からの位置）"),
+    duration: z.number().positive().describe("音価（beats）"),
+    velocity: z.number().min(0).max(127).optional().describe("ベロシティ 0-127（既定 100）"),
+    muted: z.boolean().optional().describe("ノートをミュートする"),
+    probability: z.number().min(0).max(1).optional().describe("発音確率 0-1"),
+    releaseVelocity: z.number().min(0).max(127).optional().describe("リリースベロシティ 0-127"),
+    velocityDeviation: z.number().optional().describe("ベロシティのランダム偏差"),
 })
 
 export type NoteInput = z.infer<typeof noteSchema>
@@ -211,7 +211,9 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
                 notes: z
                     .array(noteSchema)
                     .default([])
-                    .describe("replace / merge の対象ノート。clear_range では無視する"),
+                    .describe(
+                        "replace / merge の対象ノート。各要素は {pitch, startTime, duration, velocity?}。例: [{pitch:60, startTime:0, duration:1, velocity:100}]。clear_range では無視する",
+                    ),
                 mode: z.enum(["replace", "merge", "clear_range"]).default("replace"),
                 range: z
                     .object({ start: z.number().min(0), end: z.number().positive() })
