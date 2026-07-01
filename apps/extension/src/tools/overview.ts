@@ -9,6 +9,7 @@ import {
 } from "@ableton-extensions/sdk"
 import { toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 
 function trackKind(track: Track<TargetApiVersion>): string {
@@ -63,32 +64,68 @@ export function registerOverviewTool(server: McpServer, deps: ServerDeps): void 
         {
             title: "Live Set 概要",
             description:
-                "tempo・スケール・トラック概要（index/name/kind/mute/solo/arm）・シーン数などを 1 コールで返す。方向付けに使う。",
+                "tempo・スケール・トラック概要（index/name/kind/mute/solo/arm）・シーン数などを 1 コールで返す。方向付けに使う。大規模プロジェクトでは includeClips:false でクリップ明細を省略し、trackOffset/trackLimit でトラック範囲を絞れる。",
+            inputSchema: {
+                includeClips: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        "各トラックのアレンジメントクリップ明細を含めるか（既定 true）。false で件数のみ",
+                    ),
+                trackOffset: z
+                    .number()
+                    .int()
+                    .min(0)
+                    .optional()
+                    .describe("返すトラックの開始 index（既定 0）"),
+                trackLimit: z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional()
+                    .describe("返すトラックの最大数（既定は全件）"),
+            },
         },
-        async () => {
+        async ({ includeClips, trackOffset, trackLimit }) => {
             try {
                 const song = deps.context.application.song
+                const include_clips = includeClips ?? true
+                const all_tracks = song.tracks
+
                 let arrangement_end_time = 0
-                const tracks = song.tracks.map((track, index) => {
-                    const arrangement_clips = track.arrangementClips.map((clip, clip_index) => {
+                for (const track of all_tracks) {
+                    for (const clip of track.arrangementClips) {
                         arrangement_end_time = Math.max(arrangement_end_time, clip.endTime)
-                        return arrangementClipSummary(clip, clip_index)
-                    })
-                    return {
-                        index,
+                    }
+                }
+                for (const cue of song.cuePoints) {
+                    arrangement_end_time = Math.max(arrangement_end_time, cue.time)
+                }
+
+                const offset = trackOffset ?? 0
+                const shown = all_tracks.slice(offset, offset + (trackLimit ?? all_tracks.length))
+                const tracks = shown.map((track, position) => {
+                    const arrangement_clips = track.arrangementClips
+                    const base = {
+                        index: offset + position,
                         name: track.name,
                         kind: trackKind(track),
                         mute: track.mute,
                         solo: track.solo,
                         arm: track.arm,
                         arrangementClipCount: arrangement_clips.length,
-                        arrangementClips: arrangement_clips,
+                    }
+                    if (!include_clips) {
+                        return base
+                    }
+                    return {
+                        ...base,
+                        arrangementClips: arrangement_clips.map((clip, clip_index) =>
+                            arrangementClipSummary(clip, clip_index),
+                        ),
                     }
                 })
-                const cue_points = song.cuePoints.map((cue, index) => {
-                    arrangement_end_time = Math.max(arrangement_end_time, cue.time)
-                    return cuePointSummary(cue, index)
-                })
+
                 const overview = {
                     tempo: song.tempo,
                     scale: {
@@ -96,12 +133,15 @@ export function registerOverviewTool(server: McpServer, deps: ServerDeps): void 
                         mode: song.scaleMode,
                         rootNote: song.rootNote,
                     },
-                    trackCount: tracks.length,
+                    trackCount: all_tracks.length,
                     returnTrackCount: song.returnTracks.length,
                     sceneCount: song.scenes.length,
                     cuePointCount: song.cuePoints.length,
                     arrangementEndTime: arrangement_end_time,
-                    cuePoints: cue_points,
+                    trackOffset: offset,
+                    tracksShown: tracks.length,
+                    includeClips: include_clips,
+                    cuePoints: song.cuePoints.map((cue, index) => cuePointSummary(cue, index)),
                     tracks,
                 }
                 return {
