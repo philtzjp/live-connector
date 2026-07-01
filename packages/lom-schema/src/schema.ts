@@ -37,6 +37,12 @@ export const query_contract: QueryContract = {
     grammar:
         "MATCH <pattern> [WHERE <expr>] RETURN [DISTINCT] <items> [ORDER BY <expr> [ASC|DESC], ...] [SKIP <integer>] [LIMIT <integer>]",
     start_labels: startable_labels,
+    time_coordinates: {
+        absolute:
+            "アレンジメント絶対拍。Clip.startTime / endTime、CuePoint.time、create_arrangement_clip / move_clip の startTime、clearClipsInRange の範囲はこの系。",
+        relative:
+            "クリップ相対拍 [0, クリップ長)。notes[].startTime、startMarker / endMarker / loopStart / loopEnd はこの系。write_notes は相対拍で受け取り、クリップ長を超える startTime は既定で拒否する（allowOutOfRange:true で許容）。",
+    },
     read: {
         tool: "query",
         return_contract:
