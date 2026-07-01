@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.8.0"
+            value: "2.9.0"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.8.0"
+            value: "2.9.0"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.8.0"
+            value: "2.9.0"
           - name: "description"
             type: "string"
             required: true
@@ -1179,6 +1179,32 @@ mcp_tools:
                           endTime: "number"
                           noteCount: "number"
 
+    - name: "load_sample"
+      source: "apps/extension/src/tools/samples.ts"
+      note: "select で選んだ Simpler に importIntoProject→replaceSample でオーディオを読み込む。Drum Rack パッド内 Simpler も対象。"
+      input:
+          select:
+              type: "string"
+              required: true
+              contract: "Simpler を単一ノード変数で RETURN する Cypher。"
+          audioFilePath:
+              type: "string"
+              required: true
+              constraints: ["絶対パス", "対応拡張子(.wav/.aif/.aiff/.mp3/.flac/.ogg/.m4a/.aac)"]
+          preview:
+              type: "boolean"
+              required: false
+      output:
+          content:
+              type: "TextContent[]"
+              text_json_shape:
+                  status: "\"preview\" | \"ok\""
+                  device: "{ name: string }"
+                  audioFilePath: "string"
+                  importedPath:
+                      optional: true
+                      type: "string"
+
     - name: "structure_tools"
       source: "apps/extension/src/tools/structure.ts"
       note: "SDK の構造操作をツール化。破壊操作（delete_*）は preview で対象確認、confirm:true で実行（guardDestructive）。"
@@ -1841,7 +1867,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.8.0.ablx"
+        output_path: "apps/extension/dist/live-connector-2.9.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
@@ -2211,6 +2237,7 @@ cypher_contract:
             - "apply_device_state"
             - "write_notes"
             - "transform_notes"
+            - "load_sample"
         required: "RETURN exactly one bound node variable"
         valid_examples:
             - "MATCH (t:AudioTrack {name:\"Print\"}) RETURN t"

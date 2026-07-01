@@ -173,6 +173,7 @@ sequenceDiagram
 | `set_device_parameter` | write | Parameter の `value` を書き込む |
 | `save_device_state` | write/fs | 1 つの Device の公開 DeviceParameter 値を `environment.storageDirectory` に JSON 保存する |
 | `apply_device_state` | write/fs | 保存済み DeviceParameter 値を 1 つの Device の同名パラメータへ再適用する |
+| `load_sample` | write/fs | 1 つの Simpler に importIntoProject + replaceSample でオーディオを読み込む |
 | `write_notes` | write | 1 つの MidiClip の notes を replace する |
 
 ## 読み取りフロー
