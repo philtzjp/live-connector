@@ -1,7 +1,12 @@
 import { BadRequestError } from "@live-connector/error"
 import type {
+    AggregateArg,
+    AggregateFunc,
+    AggregateItem,
     ComparisonOperator,
     NodePattern,
+    OrderItem,
+    OrderKey,
     PatternPart,
     Query,
     RelationshipPattern,
@@ -13,6 +18,19 @@ import { type Token, tokenize } from "./tokenizer"
 
 /** 可変長リレーション `*` で上限省略時に適用するホップ数の上限。 */
 const DEFAULT_MAX_HOPS = 8
+
+const AGGREGATE_FUNCS = new Set<AggregateFunc>(["count", "min", "max", "avg", "sum"])
+
+/** 集計項目の正規化表記（RETURN 行キー・ORDER BY 参照に使う）。 */
+function aggregateAlias(func: AggregateFunc, arg: AggregateArg): string {
+    if (arg.kind === "star") {
+        return `${func}(*)`
+    }
+    if (arg.kind === "variable") {
+        return `${func}(${arg.variable})`
+    }
+    return `${func}(${arg.variable}.${arg.property})`
+}
 
 class Parser {
     private readonly tokens: Token[]
@@ -33,18 +51,30 @@ class Parser {
         }
 
         this.expectKeyword("RETURN")
+        const distinct = this.consumeKeyword("DISTINCT")
         const returns = this.parseReturnItems()
 
+        const hasAggregate = returns.some((item) => item.kind === "aggregate")
+        if (hasAggregate && returns.some((item) => item.kind === "all")) {
+            throw this.error("RETURN * cannot be combined with aggregate functions")
+        }
+
+        const orderBy = this.peekKeyword("ORDER") ? this.parseOrderBy() : []
+
+        let skip: number | null = null
+        if (this.consumeKeyword("SKIP")) {
+            skip = this.expectNonNegativeInteger("SKIP")
+        }
+
         let limit: number | null = null
-        if (this.peekKeyword("LIMIT")) {
-            this.next()
-            limit = this.expectIntegerLiteral()
+        if (this.consumeKeyword("LIMIT")) {
+            limit = this.expectNonNegativeInteger("LIMIT")
         }
 
         if (this.pos < this.tokens.length) {
             throw this.error(`Unexpected token after RETURN clause`)
         }
-        return { pattern, where, returns, limit }
+        return { pattern, where, distinct, returns, orderBy, skip, limit }
     }
 
     private parsePattern(): PatternPart {
@@ -133,6 +163,11 @@ class Parser {
                 items.push({ kind: "all" })
                 continue
             }
+            const aggregate = this.tryParseAggregate()
+            if (aggregate !== null) {
+                items.push(aggregate)
+                continue
+            }
             const variable = this.expectType("identifier").value
             if (this.consumePunct(".")) {
                 const property = this.expectType("identifier").value
@@ -142,6 +177,74 @@ class Parser {
             }
         } while (this.consumePunct(","))
         return items
+    }
+
+    /** 集計関数 `func(...)` を試行的にパースする。集計でなければ位置を進めず null を返す。 */
+    private tryParseAggregate(): AggregateItem | null {
+        const token = this.peek()
+        if (token === undefined || token.type !== "identifier") {
+            return null
+        }
+        const lowered = token.value.toLowerCase()
+        if (!AGGREGATE_FUNCS.has(lowered as AggregateFunc)) {
+            return null
+        }
+        const next = this.tokens[this.pos + 1]
+        if (next === undefined || next.type !== "punct" || next.value !== "(") {
+            return null
+        }
+        this.next()
+        this.expectPunct("(")
+        let arg: AggregateArg
+        if (this.consumePunct("*")) {
+            arg = { kind: "star" }
+        } else {
+            const variable = this.expectType("identifier").value
+            if (this.consumePunct(".")) {
+                const property = this.expectType("identifier").value
+                arg = { kind: "property", variable, property }
+            } else {
+                arg = { kind: "variable", variable }
+            }
+        }
+        this.expectPunct(")")
+        const func = lowered as AggregateFunc
+        if (func !== "count" && arg.kind !== "property") {
+            throw this.error(
+                `${func}() requires a property argument such as ${func}(n.pitch); only count() accepts count(*) or count(var)`,
+            )
+        }
+        return { kind: "aggregate", func, arg, alias: aggregateAlias(func, arg) }
+    }
+
+    private parseOrderBy(): OrderItem[] {
+        this.expectKeyword("ORDER")
+        this.expectKeyword("BY")
+        const items: OrderItem[] = []
+        do {
+            const key = this.parseOrderKey()
+            let direction: "ASC" | "DESC" = "ASC"
+            if (this.consumeKeyword("ASC")) {
+                direction = "ASC"
+            } else if (this.consumeKeyword("DESC")) {
+                direction = "DESC"
+            }
+            items.push({ key, direction })
+        } while (this.consumePunct(","))
+        return items
+    }
+
+    private parseOrderKey(): OrderKey {
+        const aggregate = this.tryParseAggregate()
+        if (aggregate !== null) {
+            return aggregate
+        }
+        const variable = this.expectType("identifier").value
+        if (this.consumePunct(".")) {
+            const property = this.expectType("identifier").value
+            return { kind: "property", variable, property }
+        }
+        return { kind: "variable", variable }
     }
 
     private parseOr(): WhereExpr {
@@ -249,6 +352,14 @@ class Parser {
         return value
     }
 
+    private expectNonNegativeInteger(clause: string): number {
+        const value = this.expectIntegerLiteral()
+        if (value < 0) {
+            throw this.error(`${clause} must be a non-negative integer`)
+        }
+        return value
+    }
+
     private peek(): Token | undefined {
         return this.tokens[this.pos]
     }
@@ -278,6 +389,14 @@ class Parser {
 
     private consumePunct(value: string): boolean {
         if (this.peekPunct(value)) {
+            this.pos++
+            return true
+        }
+        return false
+    }
+
+    private consumeKeyword(value: string): boolean {
+        if (this.peekKeyword(value)) {
             this.pos++
             return true
         }
