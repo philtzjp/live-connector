@@ -28,6 +28,8 @@ function buildDeps(): ServerDeps {
         mute: false,
         solo: false,
         arm: true,
+        clipSlots: [{ clip: {} }, { clip: null }],
+        devices: [{}],
         arrangementClips: [
             fakeInstance(MidiClip, { name: "Beat", startTime: 0, endTime: 4, duration: 4 }),
         ],
@@ -37,9 +39,12 @@ function buildDeps(): ServerDeps {
         mute: true,
         solo: false,
         arm: false,
+        clipSlots: [],
+        devices: [],
         arrangementClips: [],
     })
     const song = {
+        handle: 1,
         tempo: 128,
         scaleName: "Minor",
         scaleMode: true,
@@ -50,7 +55,10 @@ function buildDeps(): ServerDeps {
         cuePoints: [{ name: "Verse", time: 8 }],
     }
     return {
-        context: { application: { song } },
+        context: {
+            application: { song },
+            environment: { storageDirectory: "/tmp/live-connector" },
+        },
         log: { debug() {}, info() {}, warn() {}, error() {} },
     } as unknown as ServerDeps
 }
@@ -91,6 +99,18 @@ describe("get_overview", () => {
             json: { arrangementEndTime: number }
         }
         expect(json.arrangementEndTime).toBe(8)
+    })
+
+    it("includes set identity and a structure digest", async () => {
+        const { json } = (await server.call("get_overview")) as {
+            json: {
+                identity: { storageDirectory: string; songHandle: unknown }
+                structureDigest: string
+            }
+        }
+        expect(json.identity.storageDirectory).toBe("/tmp/live-connector")
+        expect(json.identity.songHandle).toBe(1)
+        expect(json.structureDigest).toMatch(/^[0-9a-f]{8}$/)
     })
 
     it("omits per-clip detail when includeClips is false", async () => {

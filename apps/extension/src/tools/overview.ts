@@ -11,6 +11,7 @@ import { toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
+import { collectSetFeatures, setIdentity, structureDigest } from "../lom/fingerprint"
 
 function trackKind(track: Track<TargetApiVersion>): string {
     if (track instanceof MidiTrack) {
@@ -127,6 +128,8 @@ export function registerOverviewTool(server: McpServer, deps: ServerDeps): void 
                 })
 
                 const overview = {
+                    identity: setIdentity(deps.context),
+                    structureDigest: structureDigest(collectSetFeatures(song)),
                     tempo: song.tempo,
                     scale: {
                         name: song.scaleName,
