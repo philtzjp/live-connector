@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.11"
+            value: "2.17.12"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.11"
+            value: "2.17.12"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.11"
+            value: "2.17.12"
           - name: "description"
             type: "string"
             required: true
@@ -905,7 +905,7 @@ mcp_tools:
 
     - name: "render_audio"
       source: "apps/extension/src/tools/audio.ts"
-      note: "既定は同期で filePath を返す。background:true で jobId を即時返し、get_render_job で照会する（長尺のクライアントタイムアウト回避）。ジョブは module singleton の Map に最新 MAX_RENDER_JOBS(50) 件保持。"
+      note: "既定は同期で filePath を返す。background:true で jobId を即時返し、get_render_job で照会する（長尺のクライアントタイムアウト回避）。ジョブは module singleton の Map に MAX_RENDER_JOBS(50) 件保持。保持数超過の evict は done / error のみ（running は照会可能性を保つため保持）。running が上限を占有している場合、新規 background 開始は hint 付き BadRequestError で拒否する。"
       input:
           select:
               type: "string"
@@ -1996,7 +1996,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.11.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.12.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
