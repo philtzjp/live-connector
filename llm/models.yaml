@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.5"
+            value: "2.17.6"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.5"
+            value: "2.17.6"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.5"
+            value: "2.17.6"
           - name: "description"
             type: "string"
             required: true
@@ -1640,16 +1640,16 @@ mcp_tools:
               type: "NoteInput[]"
               required: false
               default: "[]"
-              note: "replace / merge の対象ノート。clear_range では無視する。"
+              note: "replace / merge の対象ノート（1 件以上必須。空・省略は hint 付き BadRequestError で全消去を防ぐ）。clear_range では無視する。startTime + duration がクリップ末尾を超えるノートは受理し、応答の tailOverflow に件数を返す。"
           mode:
               type: "\"replace\" | \"merge\" | \"clear_range\""
               required: false
               default: "replace"
-              note: "replace=全置換 / merge=既存保持し追加（同一 pitch+startTime は入力で置換）/ clear_range=range のノート削除。"
+              note: "replace=全置換 / merge=既存保持し追加（同一 pitch+startTime は入力で置換）/ clear_range=range のノート削除。全削除は clear_range を使う。"
           range:
               type: "{ start: number; end: number }"
               required: false
-              note: "clear_range で削除するクリップ相対拍範囲 [start, end)。clear_range では必須。"
+              note: "clear_range で削除するクリップ相対拍範囲 [start, end)。clear_range では必須。end <= start は hint 付きエラー。範囲全体がクリップ相対範囲 [0, クリップ長) の外にある場合は座標系の説明付きで拒否。"
           allowOutOfRange:
               type: "boolean"
               required: false
@@ -1990,7 +1990,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.5.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.6.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
