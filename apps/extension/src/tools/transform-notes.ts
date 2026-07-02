@@ -52,13 +52,29 @@ function clampVelocity(value: number): number {
     return Math.max(0, Math.min(127, Math.round(value)))
 }
 
-function quantizeStart(startTime: number, grid: number, strength: number): number {
-    const nearest = Math.round(startTime / grid) * grid
+/**
+ * 最近接グリッドへ丸める。丸め先がクリップ末尾以降になる場合は範囲内の直前グリッドへ丸め、
+ * quantize がノートを削除しないことを保証する（Live 本体の quantize もノートを削除しない）。
+ */
+function quantizeStart(
+    startTime: number,
+    grid: number,
+    strength: number,
+    clipLength: number,
+): number {
+    let nearest = Math.round(startTime / grid) * grid
+    if (nearest >= clipLength) {
+        nearest = Math.max(0, nearest - grid)
+    }
     return startTime + (nearest - startTime) * strength
 }
 
 /** フィルタに合致した 1 ノートから変換後ノート列を生成する（duplicate は原本＋複製）。 */
-function expandNote(note: NoteDescription, spec: TransformSpec): NoteDescription[] {
+function expandNote(
+    note: NoteDescription,
+    spec: TransformSpec,
+    clipLength: number,
+): NoteDescription[] {
     switch (spec.type) {
         case "transpose":
             return [{ ...note, pitch: note.pitch + spec.semitones }]
@@ -78,7 +94,12 @@ function expandNote(note: NoteDescription, spec: TransformSpec): NoteDescription
             return [
                 {
                     ...note,
-                    startTime: quantizeStart(note.startTime, spec.grid, spec.strength ?? 1),
+                    startTime: quantizeStart(
+                        note.startTime,
+                        spec.grid,
+                        spec.strength ?? 1,
+                        clipLength,
+                    ),
                 },
             ]
         case "duplicate": {
@@ -103,8 +124,9 @@ function isUntouchedOriginal(
 
 /**
  * クリップ相対座標でノートに決定的変換を適用する。フィルタ外のノートは素通し。
- * pitch が [0,127] を外れたノートは削除。startTime が [0, clipLength) を外れたノートは
- * onOutOfRange="error" で例外、"drop" で削除する。
+ * startTime が [0, clipLength) または pitch が [0, 127] を外れたノートは、
+ * onOutOfRange="error"（既定）で変換全体を例外にし、"drop" で削除する。
+ * quantize は末尾を超えないよう範囲内の直前グリッドへ丸めるため、ノートを削除しない。
  */
 export function transformNotes(
     notes: readonly NoteDescription[],
@@ -115,9 +137,10 @@ export function transformNotes(
 ): TransformResult {
     const result: NoteDescription[] = []
     let affected = 0
-    let droppedPitch = 0
-    let droppedTime = 0
-    const outOfRange: number[] = []
+    let dropped_pitch = 0
+    let dropped_time = 0
+    const out_of_range_times: number[] = []
+    const out_of_range_pitches: number[] = []
 
     for (const note of notes) {
         if (!noteInFilter(note, filter)) {
@@ -125,32 +148,46 @@ export function transformNotes(
             continue
         }
         affected++
-        for (const produced of expandNote(note, spec)) {
+        for (const produced of expandNote(note, spec, clipLength)) {
             if (isUntouchedOriginal(spec, produced, note)) {
                 result.push(produced)
                 continue
             }
             if (produced.pitch < 0 || produced.pitch > 127) {
-                droppedPitch++
+                if (onOutOfRange === "error") {
+                    out_of_range_pitches.push(produced.pitch)
+                    continue
+                }
+                dropped_pitch++
                 continue
             }
             if (produced.startTime < 0 || produced.startTime >= clipLength) {
                 if (onOutOfRange === "error") {
-                    outOfRange.push(produced.startTime)
+                    out_of_range_times.push(produced.startTime)
                     continue
                 }
-                droppedTime++
+                dropped_time++
                 continue
             }
             result.push(produced)
         }
     }
 
-    if (onOutOfRange === "error" && outOfRange.length > 0) {
+    if (
+        onOutOfRange === "error" &&
+        (out_of_range_times.length > 0 || out_of_range_pitches.length > 0)
+    ) {
+        const parts: string[] = []
+        if (out_of_range_times.length > 0) {
+            parts.push(`startTimes outside [0, ${clipLength}): ${out_of_range_times.join(", ")}`)
+        }
+        if (out_of_range_pitches.length > 0) {
+            parts.push(`pitches outside [0, 127]: ${out_of_range_pitches.join(", ")}`)
+        }
         throw new BadRequestError(
-            `${outOfRange.length} transformed note(s) fall outside the clip range [0, ${clipLength}).`,
+            `${out_of_range_times.length + out_of_range_pitches.length} transformed note(s) fall outside the clip time range or MIDI pitch range.`,
             {
-                hint: `Adjust the transform or filter so results stay in clip-relative range, or pass onOutOfRange:"drop". Offending startTimes: ${outOfRange.join(", ")}.`,
+                hint: `Adjust the transform or filter so results stay in range, or pass onOutOfRange:"drop" to delete the offending notes. ${parts.join("; ")}.`,
             },
         )
     }
@@ -158,8 +195,8 @@ export function transformNotes(
     return {
         notes: result,
         affected,
-        droppedPitch,
-        droppedTime,
+        droppedPitch: dropped_pitch,
+        droppedTime: dropped_time,
         before: notes.length,
         after: result.length,
     }
@@ -232,7 +269,7 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
         {
             title: "MIDI ノート変換",
             description:
-                "select で選んだ 1 つの MidiClip のノートを決定的に変換する。transform: transpose（半音）/ time_shift（拍）/ velocity（scale/offset）/ quantize（grid 拍・strength）/ duplicate（offset 拍・count）。filter（時間範囲 timeStart/timeEnd・pitch 範囲 pitchMin/pitchMax）で対象を絞れる。座標はクリップ相対拍。結果が [0, クリップ長) を外れる startTime は onOutOfRange で drop（既定）/ error。pitch が 0..127 を外れるノートは削除。全ノートを往復させずに変換する。",
+                "select で選んだ 1 つの MidiClip のノートを決定的に変換する。transform: transpose（半音）/ time_shift（拍）/ velocity（scale/offset）/ quantize（grid 拍・strength）/ duplicate（offset 拍・count）。filter（時間範囲 timeStart/timeEnd・pitch 範囲 pitchMin/pitchMax）で対象を絞れる。座標はクリップ相対拍。結果が [0, クリップ長) を外れる startTime、または 0..127 を外れる pitch は onOutOfRange で error（既定。write_notes の境界検証と同じく拒否）/ drop（削除を明示的に許可）。quantize は末尾を超えないよう範囲内の直前グリッドへ丸め、ノートを削除しない。全ノートを往復させずに変換する。",
             inputSchema: {
                 select: z
                     .string()
@@ -242,7 +279,12 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
                     ),
                 transform: transformSchema,
                 filter: filterSchema,
-                onOutOfRange: z.enum(["drop", "error"]).default("drop"),
+                onOutOfRange: z
+                    .enum(["drop", "error"])
+                    .default("error")
+                    .describe(
+                        "変換結果が範囲外になるノートの扱い。error=変換全体を拒否（既定）/ drop=範囲外ノートを削除",
+                    ),
                 preview: z.boolean().optional(),
             },
         },
