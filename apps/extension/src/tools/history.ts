@@ -96,6 +96,10 @@ export function summarizeResult(parsed: Record<string, unknown>): Record<string,
         "clipLength",
         "index",
         "name",
+        "phase",
+        "appliedSteps",
+        "failedSteps",
+        "unappliedSteps",
     ]
     const out: Record<string, unknown> = {}
     for (const key of keys) {
@@ -130,16 +134,17 @@ async function appendHistory(deps: ServerDeps, entry: HistoryEntry): Promise<voi
     await rotateIfLarge(file)
 }
 
-/** result が status:"ok" の実書き込みのみ履歴へ記録する（preview / confirm_required / error は記録しない）。 */
+/**
+ * 実書き込みを履歴へ記録する。status:"ok" に加えて、batch の適用段階失敗
+ * （status:"failed" / phase:"apply" / appliedSteps 非空 = 部分適用が Set に残る）も記録する。
+ * preview / confirm_required / 解決段階の失敗（何も適用されない）は記録しない。
+ */
 async function recordWrite(
     deps: ServerDeps,
     tool: string,
     args: Record<string, unknown>,
     result: ToolResult,
 ): Promise<void> {
-    if (result.isError) {
-        return
-    }
     const text = result.content.map((part) => part.text).join("")
     let parsed: unknown
     try {
@@ -147,18 +152,24 @@ async function recordWrite(
     } catch {
         return
     }
-    if (
-        typeof parsed !== "object" ||
-        parsed === null ||
-        (parsed as { status?: unknown }).status !== "ok"
-    ) {
+    if (typeof parsed !== "object" || parsed === null) {
+        return
+    }
+    const payload = parsed as Record<string, unknown>
+    const is_ok = result.isError !== true && payload.status === "ok"
+    const is_partial_apply =
+        payload.status === "failed" &&
+        payload.phase === "apply" &&
+        Array.isArray(payload.appliedSteps) &&
+        payload.appliedSteps.length > 0
+    if (!is_ok && !is_partial_apply) {
         return
     }
     await appendHistory(deps, {
         at: new Date().toISOString(),
         tool,
         input: summarizeInput(args),
-        result: summarizeResult(parsed as Record<string, unknown>),
+        result: summarizeResult(payload),
     })
 }
 

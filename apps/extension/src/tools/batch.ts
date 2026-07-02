@@ -1,18 +1,12 @@
-import { MidiClip, type NoteDescription } from "@ableton-extensions/sdk"
+import { MidiClip } from "@ableton-extensions/sdk"
 import { parseQuery, type ScalarValue, selectNodes } from "@live-connector/cypher"
 import { BadRequestError, toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
-import {
-    clearNotesInRange,
-    clipNoteLength,
-    findOutOfRangeNotes,
-    mergeNotes,
-    noteSchema,
-    toNoteDescription,
-} from "./notes"
+import { noteSchema, planNoteWrite } from "./notes"
+import { SET_TOOL_SET_SCHEMAS } from "./write"
 
 const CONFIRM_THRESHOLD = 20
 const SONG_SELECT = "MATCH (s:Song) RETURN s"
@@ -26,18 +20,37 @@ const SET_LABEL: Record<string, string> = {
     set_device_parameter: "Parameter",
 }
 
-const setValueSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
-
-const stepSchema = z.discriminatedUnion("tool", [
-    z.object({ tool: z.literal("set_song"), set: setValueSchema }),
-    z.object({ tool: z.literal("set_track"), select: z.string().min(1), set: setValueSchema }),
-    z.object({ tool: z.literal("set_clip"), select: z.string().min(1), set: setValueSchema }),
-    z.object({ tool: z.literal("set_scene"), select: z.string().min(1), set: setValueSchema }),
-    z.object({ tool: z.literal("set_cue_point"), select: z.string().min(1), set: setValueSchema }),
+/**
+ * ステップの入力スキーマ。set の per-property 検証は単体ツールと同じ
+ * SET_TOOL_SET_SCHEMAS を、write_notes の各フィールドは noteSchema を共有する。
+ * テスト（検証等価性）からも参照する。
+ */
+export const batchStepSchema = z.discriminatedUnion("tool", [
+    z.object({ tool: z.literal("set_song"), set: SET_TOOL_SET_SCHEMAS.set_song }),
+    z.object({
+        tool: z.literal("set_track"),
+        select: z.string().min(1),
+        set: SET_TOOL_SET_SCHEMAS.set_track,
+    }),
+    z.object({
+        tool: z.literal("set_clip"),
+        select: z.string().min(1),
+        set: SET_TOOL_SET_SCHEMAS.set_clip,
+    }),
+    z.object({
+        tool: z.literal("set_scene"),
+        select: z.string().min(1),
+        set: SET_TOOL_SET_SCHEMAS.set_scene,
+    }),
+    z.object({
+        tool: z.literal("set_cue_point"),
+        select: z.string().min(1),
+        set: SET_TOOL_SET_SCHEMAS.set_cue_point,
+    }),
     z.object({
         tool: z.literal("set_device_parameter"),
         select: z.string().min(1),
-        set: setValueSchema,
+        set: SET_TOOL_SET_SCHEMAS.set_device_parameter,
     }),
     z.object({
         tool: z.literal("write_notes"),
@@ -49,7 +62,7 @@ const stepSchema = z.discriminatedUnion("tool", [
     }),
 ])
 
-type Step = z.infer<typeof stepSchema>
+type Step = z.infer<typeof batchStepSchema>
 
 type ResolvedStep = {
     index: number
@@ -86,36 +99,23 @@ async function resolveStep(
 ): Promise<ResolvedStep> {
     if (step.tool === "write_notes") {
         const clip = resolveMidiClip(await selectNodes(parseQuery(step.select), adapter))
-        const clip_length = clipNoteLength(clip)
-        const incoming = step.notes.map(toNoteDescription)
-        if (step.mode !== "clear_range") {
-            const out_of_range = findOutOfRangeNotes(step.notes, clip_length)
-            if (out_of_range.length > 0 && step.allowOutOfRange !== true) {
-                throw new BadRequestError(
-                    `write_notes step has ${out_of_range.length} note(s) outside clip range [0, ${clip_length}); pass allowOutOfRange or fix coordinates`,
-                )
-            }
-        }
-        let next_notes: NoteDescription[]
-        if (step.mode === "replace") {
-            next_notes = incoming
-        } else if (step.mode === "merge") {
-            next_notes = mergeNotes(clip.notes, incoming)
-        } else {
-            if (step.range === undefined) {
-                throw new BadRequestError(
-                    "write_notes step clear_range requires a range {start,end}",
-                )
-            }
-            next_notes = clearNotesInRange(clip.notes, step.range.start, step.range.end).kept
-        }
+        // 検証・計画は単体 write_notes と同じ planNoteWrite を通す。適用時は
+        // computeNextNotes がその時点の clip.notes から再計算するため、同一クリップへの
+        // 多段ステップでも先行ステップの結果を消さない（summary の件数は解決時点の推定）。
+        const plan = planNoteWrite(clip, {
+            tool_name: "write_notes step",
+            notes: step.notes,
+            mode: step.mode,
+            range: step.range,
+            allowOutOfRange: step.allowOutOfRange,
+        })
         return {
             index,
             tool: step.tool,
             targets: 1,
-            summary: { tool: step.tool, mode: step.mode, noteCount: next_notes.length },
+            summary: { tool: step.tool, ...plan.summary },
             apply: () => {
-                clip.notes = next_notes
+                clip.notes = plan.computeNextNotes()
             },
         }
     }
@@ -169,9 +169,10 @@ async function runBatch(
             try {
                 resolved.push(await resolveStep(deps, adapter, step, index))
             } catch (error) {
-                // 検証はすべて適用前に行うため、失敗時は何も適用しない（all-or-nothing）。
+                // 解決・検証段階の失敗では何も適用しない。
                 return textResult({
                     status: "failed",
+                    phase: "resolve",
                     failedStep: index,
                     tool: step.tool,
                     reason: error instanceof Error ? error.message : String(error),
@@ -201,9 +202,68 @@ async function runBatch(
         }
 
         // 全ステップのミューテーションを 1 つの同期トランザクションで初期化し、単一 undo ステップにする。
-        await deps.context.withinTransaction(() =>
-            Promise.all(resolved.map((entry) => entry.apply())),
-        )
+        // SDK の withinTransaction は undo グルーピングのみでロールバックしないため、適用段階の
+        // 失敗ではステップごとの成否を追跡し、部分適用を応答から識別できるようにする。
+        type StepOutcome = { index: number; tool: string; reason?: string }
+        const applied_steps: StepOutcome[] = []
+        const failed_steps: StepOutcome[] = []
+        const unapplied_steps: StepOutcome[] = []
+        await deps.context.withinTransaction(() => {
+            const pending: Promise<void>[] = []
+            let sync_failed = false
+            for (const entry of resolved) {
+                if (sync_failed) {
+                    // 同期的に失敗したステップ以降は開始しない（開始済みの非同期 op は止められない）。
+                    unapplied_steps.push({ index: entry.index, tool: entry.tool })
+                    continue
+                }
+                let started: Promise<unknown>
+                try {
+                    started = Promise.resolve(entry.apply())
+                } catch (error) {
+                    sync_failed = true
+                    failed_steps.push({
+                        index: entry.index,
+                        tool: entry.tool,
+                        reason: error instanceof Error ? error.message : String(error),
+                    })
+                    continue
+                }
+                pending.push(
+                    started.then(
+                        () => {
+                            applied_steps.push({ index: entry.index, tool: entry.tool })
+                        },
+                        (error) => {
+                            failed_steps.push({
+                                index: entry.index,
+                                tool: entry.tool,
+                                reason: error instanceof Error ? error.message : String(error),
+                            })
+                        },
+                    ),
+                )
+            }
+            return Promise.all(pending)
+        })
+        applied_steps.sort((left, right) => left.index - right.index)
+        failed_steps.sort((left, right) => left.index - right.index)
+
+        if (failed_steps.length > 0) {
+            return textResult(
+                {
+                    status: "failed",
+                    phase: "apply",
+                    appliedSteps: applied_steps,
+                    failedSteps: failed_steps,
+                    unappliedSteps: unapplied_steps,
+                    totalTargets,
+                    steps: resolved.map((entry) => entry.summary),
+                    hint: "The SDK transaction groups undo but does not roll back: appliedSteps remain applied. Revert with restore_snapshot / Live undo if needed, then fix the failed steps and retry only those.",
+                },
+                true,
+            )
+        }
 
         return textResult({
             status: "ok",
@@ -224,9 +284,9 @@ export function registerBatchTool(server: McpServer, deps: ServerDeps): void {
         {
             title: "一括書き込み",
             description:
-                "複数の書き込みステップ（set_song / set_track / set_clip / set_scene / set_cue_point / set_device_parameter / write_notes）を 1 回の呼び出しで実行し、Live の undo 履歴上 1 ステップにまとめる。全ステップを適用前に解決・検証し（all-or-nothing）、いずれか失敗時は何も適用せず失敗ステップを返す。SDK のトランザクションコールバックは同期必須のため、後続ステップは同一 batch 内で先行ステップが作成したオブジェクトを参照できない（構造操作 create/delete は本ツールの対象外）。",
+                "複数の書き込みステップ（set_song / set_track / set_clip / set_scene / set_cue_point / set_device_parameter / write_notes）を 1 回の呼び出しで実行し、Live の undo 履歴上 1 ステップにまとめる。入力検証は単体ツールと同一の zod スキーマで行い、全ステップを適用前に解決・検証する。解決・検証段階の失敗では何も適用しない。適用段階の失敗では SDK トランザクションがロールバックしないため適用済みステップは残り、応答（appliedSteps / failedSteps / unappliedSteps）で識別できる。同一クリップへの複数 write_notes ステップは適用時に逐次再解決され、先行ステップの結果を保持する。SDK のトランザクションコールバックは同期必須のため、後続ステップは同一 batch 内で先行ステップが作成したオブジェクトを参照できない（構造操作 create/delete は本ツールの対象外）。",
             inputSchema: {
-                steps: z.array(stepSchema).min(1).describe("順に実行する書き込みステップ列"),
+                steps: z.array(batchStepSchema).min(1).describe("順に実行する書き込みステップ列"),
                 preview: z.boolean().optional().describe("適用せず解決済みプランを返す"),
                 confirm: z.boolean().optional().describe("大量ターゲットの変更を許可する"),
             },
