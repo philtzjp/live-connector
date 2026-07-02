@@ -38,14 +38,38 @@ function nextRenderJobId(): string {
     return `render-${Date.now().toString(36)}-${renderJobCounter.toString(36)}`
 }
 
+/**
+ * 保持数超過分の done / error ジョブを古い順に削除する。
+ * running を evict すると get_render_job が not_found を返し続け「結果が不定にならない」
+ * 契約（#55）が破れるため、running は保持する。
+ */
 function pruneRenderJobs(): void {
-    while (renderJobs.size > MAX_RENDER_JOBS) {
-        const oldest = renderJobs.keys().next().value
-        if (oldest === undefined) {
+    if (renderJobs.size <= MAX_RENDER_JOBS) {
+        return
+    }
+    for (const [job_id, job] of renderJobs) {
+        if (renderJobs.size <= MAX_RENDER_JOBS) {
             break
         }
-        renderJobs.delete(oldest)
+        if (job.status !== "running") {
+            renderJobs.delete(job_id)
+        }
     }
+}
+
+function countRunningRenderJobs(): number {
+    let count = 0
+    for (const job of renderJobs.values()) {
+        if (job.status === "running") {
+            count++
+        }
+    }
+    return count
+}
+
+/** テスト用: module singleton のジョブ保持をリセットする。 */
+export function clearRenderJobsForTest(): void {
+    renderJobs.clear()
 }
 
 function textResult(payload: unknown, isError = false): ToolResult {
@@ -107,6 +131,17 @@ async function runRenderAudioTool(
         const duration = params.endTime - params.startTime
 
         if (params.background === true) {
+            // running がジョブ保持数の上限を占有している場合、新規ジョブは保持できず
+            // 照会不能になり得るため、開始自体を拒否する。
+            const running_count = countRunningRenderJobs()
+            if (running_count >= MAX_RENDER_JOBS) {
+                throw new BadRequestError(
+                    `${running_count} render job(s) are already running and fill the job store (max ${MAX_RENDER_JOBS})`,
+                    {
+                        hint: "Wait for running jobs to finish (poll get_render_job), or render synchronously without background:true.",
+                    },
+                )
+            }
             const jobId = nextRenderJobId()
             const job: RenderJob = {
                 jobId,
