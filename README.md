@@ -11,12 +11,12 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 ## 必要なもの
 
 - Ableton Live（Extensions 対応の Beta ビルド）
-- [live-connector v2.1.0](https://github.com/philtzjp/live-connector/releases/tag/v2.1.0) の `.ablx`
+- [live-connector v2.17.1](https://github.com/philtzjp/live-connector/releases/tag/v2.17.1) の `.ablx`
 - Claude Code などの HTTP MCP クライアント
 
 ## インストール
 
-1. [`live-connector-2.1.0.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.1.0/live-connector-2.1.0.ablx) をダウンロードします。
+1. [`live-connector-2.17.1.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.17.1/live-connector-2.17.1.ablx) をダウンロードします。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -31,7 +31,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"2.1.0","description":"live-connector MCP server"}
+{"status":"pass","version":"2.17.1","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
 ```
 
 ## Claude Code で使う
@@ -46,15 +46,16 @@ claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp 
 
 ## できること
 
-- Live Set の概要取得: `get_overview`
+- Live Set の概要取得（構造ダイジェスト・接続先識別を含む）: `get_overview`
 - Live Object Model のスキーマ確認: `schema`
-- Cypher サブセットによる読み取り: `query`
-- トラック、クリップ、シーン、デバイスパラメータ、Cue Point の更新
-- Session / Arrangement クリップの作成と削除
-- 内蔵デバイス（音源・エフェクト）の挿入: `insert_device`
-- MIDI ノートの書き込み
-- Arrangement 範囲のオーディオ書き出し
-- デバイス状態の保存と再適用
+- Cypher サブセットによる読み取り: `query`（集計 count/min/max/avg/sum・ORDER BY・DISTINCT・SKIP/LIMIT）
+- トラック・シーン・デバイスの生成／削除／複製、Session / Arrangement クリップの作成と削除
+- 内蔵デバイス（音源・エフェクト）の挿入: `insert_device`、Simpler へのサンプル読み込み: `load_sample`
+- MIDI ノートの書き込み（replace / merge / clear_range・境界検証）とサーバー側変換（transpose / quantize / velocity など）: `transform_notes`
+- トラック・クリップ・シーン・デバイスパラメータ・Cue Point の更新（ミキサー volume/pan/send も Parameter として書き込み可）
+- Arrangement 範囲のオーディオ書き出し（同期／`background` ジョブ）: `render_audio`
+- 書き込み履歴の参照: `get_write_history`、変更前へのロールバック: `restore_snapshot`、複数書き込みの一括実行: `batch`
+- デバイス状態の保存と再適用: `save_device_state` / `apply_device_state`
 
 例:
 
