@@ -254,7 +254,7 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         return textResult({ status: "preview", ...plan.summary })
     }
 
-    const snapshotId = await captureNotesSnapshot(deps, {
+    const snapshot_id = await captureNotesSnapshot(deps, {
         tool: "write_notes",
         select: params.select,
         oldNotes: clip.notes,
@@ -265,7 +265,7 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         clip.notes = plan.computeNextNotes()
     })
 
-    return textResult({ status: "ok", ...plan.summary, snapshotId })
+    return textResult({ status: "ok", ...plan.summary, snapshotId: snapshot_id })
 }
 
 /** `write_notes` ツール: select で選んだ単一 MidiClip の notes を replace / merge / clear_range する。 */

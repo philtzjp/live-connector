@@ -108,13 +108,13 @@ async function runSetTool(
             })
         }
 
-        const oldTargets = await Promise.all(nodes.map((node) => adapter.serialize(node)))
-        const snapshotId = await capturePropertiesSnapshot(deps, {
+        const old_targets = await Promise.all(nodes.map((node) => adapter.serialize(node)))
+        const snapshot_id = await capturePropertiesSnapshot(deps, {
             tool: toolName,
             select: params.select,
             requiredLabel,
             properties: entries.map(([property]) => property),
-            oldTargets,
+            oldTargets: old_targets,
             targetIdentities: nodes.map((node) => objectIdentity(node.value)),
         })
 
@@ -132,7 +132,7 @@ async function runSetTool(
             status: "ok",
             modified: nodes.length,
             set: Object.fromEntries(entries),
-            snapshotId,
+            snapshotId: snapshot_id,
         })
     } catch (error) {
         deps.log.error("set tool failed", { error: String(error) })
