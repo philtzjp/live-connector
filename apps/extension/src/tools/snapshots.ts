@@ -6,6 +6,7 @@ import { BadRequestError, ConfigError, NotFoundError, toMcpError } from "@live-c
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
+import { isFileMissingError } from "./history"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
 
 const SNAPSHOT_DIRECTORY_NAME = "snapshots"
@@ -176,7 +177,8 @@ async function readSnapshot(deps: ServerDeps, id: string): Promise<SnapshotFile>
     try {
         raw = await readFile(file, "utf8")
     } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error) {
+        // ENOENT のみ not_found。EACCES / EIO 等の storage 障害は隠さずエラーにする。
+        if (isFileMissingError(error)) {
             throw new NotFoundError(`snapshot "${id}" was not found`, {
                 hint: "Use list_snapshots to see available snapshot ids.",
             })
@@ -402,8 +404,12 @@ async function listSnapshots(
     let files: string[]
     try {
         files = (await readdir(directory)).filter((name) => name.endsWith(".json"))
-    } catch {
-        return { count: 0, total: 0, truncated: false, snapshots: [] }
+    } catch (error) {
+        // ENOENT（スナップショット未作成）のみ「空」扱い。storage 障害はエラーにする。
+        if (isFileMissingError(error)) {
+            return { count: 0, total: 0, truncated: false, snapshots: [] }
+        }
+        throw error
     }
     const recent = files.sort().slice(-limit).reverse()
     const summaries: Record<string, unknown>[] = []
