@@ -85,7 +85,7 @@ export const query_contract: QueryContract = {
             "load_sample",
         ],
         return_contract:
-            "単一対象ツールの select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。",
+            "単一対象ツールの select の RETURN は、プロパティ射影ではなく単一の束縛済みノード変数のみを許可する。ORDER BY は RETURN 変数のプロパティのみ許可し、重複排除後に並べ替えてから SKIP / LIMIT を適用する。",
         valid_examples: [
             'MATCH (t:AudioTrack {name:"Print"}) RETURN t',
             'MATCH (t:MidiTrack {name:"Drums"})-[:HAS_CLIPSLOT]->(s:ClipSlot {index:0}) RETURN s',

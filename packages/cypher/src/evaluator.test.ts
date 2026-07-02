@@ -104,4 +104,36 @@ describe("selectNodes", () => {
             ),
         ).rejects.toThrow(/exactly one bound node variable/)
     })
+
+    it("applies ORDER BY before LIMIT so the sorted head is selected", async () => {
+        // Bass(id:2) が name 辞書順で先頭。シード順（Drums 先）でなく整列後の先頭を返す。
+        const nodes = await selectNodes(
+            parseQuery("MATCH (t:Track) RETURN t ORDER BY t.name LIMIT 1"),
+            buildGraph(),
+        )
+        expect(nodes.map((node) => node.id)).toEqual([2])
+    })
+
+    it("applies ORDER BY DESC with SKIP", async () => {
+        const nodes = await selectNodes(
+            parseQuery("MATCH (t:Track) RETURN t ORDER BY t.index DESC SKIP 1"),
+            buildGraph(),
+        )
+        expect(nodes.map((node) => node.id)).toEqual([1])
+    })
+
+    it("rejects ORDER BY on a variable other than the returned one", async () => {
+        await expect(
+            selectNodes(
+                parseQuery("MATCH (t:Track)-[:HAS_NOTE]->(n:Note) RETURN n ORDER BY t.name"),
+                buildGraph(),
+            ),
+        ).rejects.toThrow(/property of the returned variable "n"/)
+    })
+
+    it("rejects ORDER BY on a bare variable in a select", async () => {
+        await expect(
+            selectNodes(parseQuery("MATCH (t:Track) RETURN t ORDER BY t"), buildGraph()),
+        ).rejects.toThrow(/property of the returned variable "t"/)
+    })
 })

@@ -222,8 +222,31 @@ function sliceRange<T>(items: T[], skip: number | null, limit: number | null): T
 }
 
 /**
+ * select の ORDER BY キーを検証し、参照するプロパティ名の列を返す。
+ * 書き込み select は identity で重複排除するため、RETURN 変数以外のプロパティによる
+ * 並べ替えは対象ノードごとに一意へ定まらない。RETURN 変数のプロパティのみ許可する。
+ */
+function selectOrderProperties(orderBy: OrderItem[], variable: string): string[] {
+    const properties: string[] = []
+    for (const item of orderBy) {
+        const key = item.key
+        if (key.kind !== "property" || key.variable !== variable) {
+            throw new BadRequestError(
+                `ORDER BY in a write select must sort by a property of the returned variable "${variable}", e.g. ORDER BY ${variable}.name`,
+                {
+                    hint: `Sort by a property of "${variable}", or remove ORDER BY from the select.`,
+                },
+            )
+        }
+        properties.push(key.property)
+    }
+    return properties
+}
+
+/**
  * 書き込み対象の選択用に、単一変数を RETURN するクエリの束縛ノード集合を返す。
- * identity による重複排除の後、SKIP / LIMIT を適用する。
+ * identity による重複排除の後、ORDER BY（RETURN 変数のプロパティのみ）で並べ替え、
+ * SKIP / LIMIT を適用する。
  */
 export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Promise<N[]> {
     const returns = query.returns
@@ -231,9 +254,10 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
     if (returns.length !== 1 || target === undefined || target.kind !== "variable") {
         throw new BadRequestError(select_return_hint, select_return_metadata)
     }
+    const order_properties = selectOrderProperties(query.orderBy, target.variable)
     const bindings = await matchBindings(query, adapter)
     const seen = new Set<unknown>()
-    const nodes: N[] = []
+    let nodes: N[] = []
     for (const binding of bindings) {
         const node = binding.vars.get(target.variable)
         if (node === undefined) {
@@ -247,6 +271,18 @@ export async function selectNodes<N>(query: Query, adapter: GraphAdapter<N>): Pr
             seen.add(id)
             nodes.push(node)
         }
+    }
+    if (order_properties.length > 0) {
+        const entries: { node: N; sort_keys: ScalarValue[] }[] = []
+        for (const node of nodes) {
+            const sort_keys: ScalarValue[] = []
+            for (const property of order_properties) {
+                sort_keys.push(await adapter.getProperty(node, property))
+            }
+            entries.push({ node, sort_keys })
+        }
+        entries.sort((left, right) => compareTuples(left.sort_keys, right.sort_keys, query.orderBy))
+        nodes = entries.map((entry) => entry.node)
     }
     return sliceRange(nodes, query.skip, query.limit)
 }
