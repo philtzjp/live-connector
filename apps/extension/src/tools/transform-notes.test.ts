@@ -1,9 +1,16 @@
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import type { NoteDescription } from "@ableton-extensions/sdk"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
-import { transformNotes } from "./transform-notes"
+import { MidiClip, Song } from "@ableton-extensions/sdk"
+import type { ServerDeps } from "../deps"
+import { FakeMcpServer } from "../test-support/fake-server"
+import { registerSnapshotTools } from "./snapshots"
+import { registerTransformNotesTool, transformNotes } from "./transform-notes"
 
 function note(
     pitch: number,
@@ -170,5 +177,60 @@ describe("transformNotes: filter", () => {
         )
         expect(result.affected).toBe(1)
         expect(result.notes.map((entry) => entry.pitch)).toEqual([60, 65])
+    })
+})
+
+let storage_dir: string
+
+beforeEach(async () => {
+    storage_dir = await mkdtemp(path.join(tmpdir(), "lc-transform-"))
+})
+
+afterEach(async () => {
+    await rm(storage_dir, { recursive: true, force: true })
+})
+
+describe("transform_notes handler snapshot", () => {
+    it("captures a notes snapshot before applying and returns its id for restore", async () => {
+        const clip = Object.assign(Object.create(MidiClip.prototype), {
+            name: "Bass",
+            notes: [note(60, 0)],
+            duration: 4,
+            loopEnd: 4,
+            endMarker: 4,
+        })
+        const song = Object.assign(Object.create(Song.prototype), {
+            tracks: [{ clipSlots: [{ clip }], arrangementClips: [], devices: [] }],
+            returnTracks: [],
+            scenes: [],
+            cuePoints: [],
+            mainTrack: {},
+        })
+        const deps = {
+            context: {
+                application: { song },
+                withinTransaction: (fn: () => unknown) => fn(),
+                environment: { storageDirectory: storage_dir },
+            },
+            log: { debug() {}, info() {}, warn() {}, error() {} },
+        } as unknown as ServerDeps
+        const server = new FakeMcpServer()
+        registerTransformNotesTool(server.asMcpServer(), deps)
+        registerSnapshotTools(server.asMcpServer(), deps)
+
+        const { isError, json } = await server.call("transform_notes", {
+            select: 'MATCH (c:MidiClip {name:"Bass"}) RETURN c',
+            transform: { type: "transpose", semitones: 5 },
+            onOutOfRange: "error",
+        })
+        expect(isError).toBe(false)
+        const payload = json as { status: string; snapshotId: string }
+        expect(payload.status).toBe("ok")
+        expect(payload.snapshotId).toMatch(/^snap-/)
+        expect(clip.notes.map((entry: NoteDescription) => entry.pitch)).toEqual([65])
+
+        const restore = await server.call("restore_snapshot", { snapshotId: payload.snapshotId })
+        expect(restore.isError).toBe(false)
+        expect(clip.notes.map((entry: NoteDescription) => entry.pitch)).toEqual([60])
     })
 })

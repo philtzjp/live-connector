@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { ServerDeps } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
 import { clipNoteLength } from "./notes"
+import { captureNotesSnapshot } from "./snapshots"
 
 export type TransformSpec =
     | { type: "transpose"; semitones: number }
@@ -334,11 +335,18 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
                     return textResult({ status: "preview", ...summary })
                 }
 
+                // notes の全置換は restore_snapshot で巻き戻せるよう、適用直前に旧 notes を保存する。
+                const snapshotId = await captureNotesSnapshot(deps, {
+                    tool: "transform_notes",
+                    select,
+                    oldNotes: existing,
+                })
+
                 deps.context.withinTransaction(() => {
                     clip.notes = outcome.notes
                 })
 
-                return textResult({ status: "ok", ...summary })
+                return textResult({ status: "ok", ...summary, snapshotId })
             } catch (error) {
                 deps.log.error("transform_notes failed", { error: String(error) })
                 return textResult(toMcpError(error), true)

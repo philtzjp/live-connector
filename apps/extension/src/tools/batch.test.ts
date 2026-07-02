@@ -1,4 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
@@ -6,8 +9,19 @@ import { MidiClip, Song } from "@ableton-extensions/sdk"
 import type { ServerDeps } from "../deps"
 import { FakeMcpServer } from "../test-support/fake-server"
 import { batchStepSchema, registerBatchTool } from "./batch"
+import { registerSnapshotTools } from "./snapshots"
 
 type FakeSong = { tempo: number }
+
+let storage_dir: string
+
+beforeEach(async () => {
+    storage_dir = await mkdtemp(path.join(tmpdir(), "lc-batch-"))
+})
+
+afterEach(async () => {
+    await rm(storage_dir, { recursive: true, force: true })
+})
 
 function buildDeps(): { deps: ServerDeps; song: FakeSong } {
     const song = Object.assign(Object.create(Song.prototype), {
@@ -22,6 +36,7 @@ function buildDeps(): { deps: ServerDeps; song: FakeSong } {
         context: {
             application: { song },
             withinTransaction: (fn: () => unknown) => fn(),
+            environment: { storageDirectory: storage_dir },
         },
         log: { debug() {}, info() {}, warn() {}, error() {} },
     } as unknown as ServerDeps
@@ -153,6 +168,7 @@ function buildDepsWithClip(options: { failing_tempo: boolean }): {
         context: {
             application: { song },
             withinTransaction: (fn: () => unknown) => fn(),
+            environment: { storageDirectory: storage_dir },
         },
         log: { debug() {}, info() {}, warn() {}, error() {} },
     } as unknown as ServerDeps
@@ -213,6 +229,38 @@ describe("batch apply-phase failure and sequential note steps", () => {
         expect(isError).toBe(false)
         expect((json as { status: string }).status).toBe("ok")
         expect(clip.notes.map((entry) => entry.pitch).sort()).toEqual([60, 64, 67])
+    })
+
+    it("returns per-step snapshots that can restore the pre-batch state", async () => {
+        const { deps, clip } = buildDepsWithClip({ failing_tempo: false })
+        const snapshot_server = new FakeMcpServer()
+        registerBatchTool(snapshot_server.asMcpServer(), deps)
+        registerSnapshotTools(snapshot_server.asMcpServer(), deps)
+
+        const { json } = await snapshot_server.call("batch", {
+            steps: [
+                {
+                    tool: "write_notes",
+                    select: BATCH_BASS_SELECT,
+                    notes: [{ pitch: 72, startTime: 3, duration: 1 }],
+                    mode: "replace",
+                },
+            ],
+        })
+        const payload = json as {
+            status: string
+            snapshots: { index: number; tool: string; snapshotId: string }[]
+        }
+        expect(payload.status).toBe("ok")
+        expect(payload.snapshots).toHaveLength(1)
+        expect(payload.snapshots[0]?.tool).toBe("write_notes")
+        expect(clip.notes.map((entry) => entry.pitch)).toEqual([72])
+
+        const restore = await snapshot_server.call("restore_snapshot", {
+            snapshotId: payload.snapshots[0]?.snapshotId ?? "",
+        })
+        expect(restore.isError).toBe(false)
+        expect(clip.notes.map((entry) => entry.pitch)).toEqual([60])
     })
 
     it("rejects a reversed clear_range range at the resolve phase like the single tool", async () => {
