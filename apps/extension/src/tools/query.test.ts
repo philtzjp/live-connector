@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 // query.ts は LomGraphAdapter 経由で SDK を読み込むため、フェイクへ差し替える。
 vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
-import { applyRowCap, DEFAULT_ROW_LIMIT } from "./query"
+import { applyRowCap, DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT } from "./query"
 
 function makeRows(count: number): Row[] {
     return Array.from({ length: count }, (_, index) => ({ index }))
@@ -27,9 +27,18 @@ describe("applyRowCap", () => {
         expect(result.hint).toMatch(/truncated/i)
     })
 
-    it("never truncates when the query has an explicit LIMIT", () => {
+    it("lets an explicit LIMIT exceed the default cap up to the absolute cap", () => {
         const result = applyRowCap(makeRows(DEFAULT_ROW_LIMIT + 50), true, DEFAULT_ROW_LIMIT)
         expect(result.truncated).toBe(false)
         expect(result.count).toBe(DEFAULT_ROW_LIMIT + 50)
+    })
+
+    it("clamps an explicit LIMIT to the absolute cap with a hint", () => {
+        const result = applyRowCap(makeRows(MAX_ROW_LIMIT + 100), true, DEFAULT_ROW_LIMIT)
+        expect(result.truncated).toBe(true)
+        expect(result.count).toBe(MAX_ROW_LIMIT)
+        expect(result.rows).toHaveLength(MAX_ROW_LIMIT)
+        expect(result.hint).toMatch(/absolute cap/)
+        expect(result.hint).toMatch(/SKIP/)
     })
 })
