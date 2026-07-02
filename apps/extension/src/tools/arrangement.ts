@@ -16,6 +16,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
+import { guardDestructive } from "./structure"
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
@@ -33,6 +34,7 @@ type CreateArrangementClipParams = {
 type DeleteArrangementClipParams = {
     select: string
     preview: boolean | undefined
+    confirm: boolean | undefined
 }
 
 type CreateCuePointParams = {
@@ -44,6 +46,7 @@ type CreateCuePointParams = {
 type DeleteCuePointParams = {
     select: string
     preview: boolean | undefined
+    confirm: boolean | undefined
 }
 
 type CreateAudioArrangementClipArgs = {
@@ -262,8 +265,10 @@ async function runDeleteArrangementClipTool(
             },
             clip: clipSummary(clip, index < 0 ? null : index),
         }
-        if (params.preview === true) {
-            return textResult({ status: "preview", ...summary })
+        // instructions の「destructive な delete_* は confirm:true 必須」と実挙動を一致させる。
+        const guarded = guardDestructive(summary, params.preview, params.confirm)
+        if (guarded !== null) {
+            return guarded
         }
         await deps.context.withinTransaction(() => track.deleteClip(clip))
         return textResult({ status: "ok", ...summary })
@@ -312,8 +317,9 @@ async function runDeleteCuePointTool(
         const song = deps.context.application.song
         const index = song.cuePoints.findIndex((candidate) => candidate.handle === cue.handle)
         const summary = cuePointSummary(cue, index < 0 ? null : index)
-        if (params.preview === true) {
-            return textResult({ status: "preview", cuePoint: summary })
+        const guarded = guardDestructive({ cuePoint: summary }, params.preview, params.confirm)
+        if (guarded !== null) {
+            return guarded
         }
         await deps.context.withinTransaction(() => song.deleteCuePoint(cue))
         return textResult({ status: "ok", cuePoint: summary })
@@ -812,13 +818,18 @@ export function registerArrangementTools(server: McpServer, deps: ServerDeps): v
         {
             title: "アレンジメント Clip 削除",
             description:
-                "select で選んだ 1 つのアレンジメント Clip を削除する。Session Clip は対象外。移動・トリムは SDK 非対応のため、削除＋再作成で扱う。",
+                "select で選んだ 1 つのアレンジメント Clip を削除する（destructive。confirm:true 必須、無しは confirm_required を返す）。Session Clip は対象外。移動・トリムは move_clip / trim_clip を使う。",
             inputSchema: {
                 select: z.string().min(1).describe(clipSelectDescription()),
                 preview: z.boolean().optional(),
+                confirm: z
+                    .boolean()
+                    .optional()
+                    .describe("削除を確定する（destructive のため必須）"),
             },
         },
-        async ({ select, preview }) => runDeleteArrangementClipTool(deps, { select, preview }),
+        async ({ select, preview, confirm }) =>
+            runDeleteArrangementClipTool(deps, { select, preview, confirm }),
     )
 
     server.registerTool(
@@ -886,12 +897,18 @@ export function registerArrangementTools(server: McpServer, deps: ServerDeps): v
         "delete_cue_point",
         {
             title: "CuePoint 削除",
-            description: "select で選んだ 1 つの CuePoint を削除する。",
+            description:
+                "select で選んだ 1 つの CuePoint を削除する（destructive。confirm:true 必須、無しは confirm_required を返す）。",
             inputSchema: {
                 select: z.string().min(1).describe(cuePointSelectDescription()),
                 preview: z.boolean().optional(),
+                confirm: z
+                    .boolean()
+                    .optional()
+                    .describe("削除を確定する（destructive のため必須）"),
             },
         },
-        async ({ select, preview }) => runDeleteCuePointTool(deps, { select, preview }),
+        async ({ select, preview, confirm }) =>
+            runDeleteCuePointTool(deps, { select, preview, confirm }),
     )
 }
