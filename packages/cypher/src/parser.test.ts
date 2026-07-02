@@ -78,4 +78,20 @@ describe("parseQuery", () => {
     ])("throws for invalid query %s", (query, message) => {
         expect(() => parseQuery(query)).toThrow(message)
     })
+
+    it.each([
+        ["MATCH (t:Track) RETURN t.name AS name"],
+        ["MATCH (t:Track) WITH t RETURN t"],
+        ["MATCH (t:Track) RETURN count(DISTINCT t)"],
+    ])("attaches a supported-grammar hint to the parse error of %s", (query) => {
+        try {
+            parseQuery(query)
+            expect.unreachable("parseQuery should have thrown")
+        } catch (error) {
+            expect(String(error)).toMatch(/Cypher parse error/)
+            const metadata = (error as { metadata?: { hint?: string } }).metadata
+            expect(metadata?.hint).toMatch(/Supported grammar/)
+            expect(metadata?.hint).toMatch(/Not supported: AS aliases, WITH, count\(DISTINCT/)
+        }
+    })
 })

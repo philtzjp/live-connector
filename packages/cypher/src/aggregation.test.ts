@@ -104,6 +104,50 @@ describe("evaluate: aggregation", () => {
         )
         expect(rows.map((row) => row["t.name"])).toEqual(["Keys", "Drums"])
     })
+
+    it("returns a single row for a pure aggregate over an empty match", async () => {
+        // 「0 件」と「パターン不一致」を区別させない Cypher 標準の挙動。
+        const rows = await evaluate(
+            parseQuery(
+                'MATCH (t:MidiTrack {name:"存在しない"}) RETURN count(t), sum(t.index), min(t.index), max(t.index), avg(t.index)',
+            ),
+            buildGroupedGraph(),
+        )
+        expect(rows).toEqual([
+            {
+                "count(t)": 0,
+                "sum(t.index)": 0,
+                "min(t.index)": null,
+                "max(t.index)": null,
+                "avg(t.index)": null,
+            },
+        ])
+    })
+
+    it("keeps zero rows for a grouped aggregate over an empty match", async () => {
+        const rows = await evaluate(
+            parseQuery('MATCH (t:MidiTrack {name:"存在しない"}) RETURN t.name, count(t)'),
+            buildGroupedGraph(),
+        )
+        expect(rows).toEqual([])
+    })
+
+    it("rejects an aggregate over a variable that is not bound in MATCH", async () => {
+        await expect(
+            evaluate(parseQuery("MATCH (t:MidiTrack) RETURN count(x)"), buildGroupedGraph()),
+        ).rejects.toThrow(/Unknown variable "x"/)
+        await expect(
+            evaluate(parseQuery("MATCH (t:MidiTrack) RETURN min(x.pitch)"), buildGroupedGraph()),
+        ).rejects.toThrow(/Unknown variable "x"/)
+    })
+
+    it("computes min/max over string properties lexicographically", async () => {
+        const rows = await evaluate(
+            parseQuery("MATCH (t:MidiTrack) RETURN min(t.name), max(t.name)"),
+            buildGroupedGraph(),
+        )
+        expect(rows).toEqual([{ "min(t.name)": "Drums", "max(t.name)": "Keys" }])
+    })
 })
 
 describe("evaluate: ordering / distinct / paging", () => {

@@ -19,6 +19,10 @@ import { type Token, tokenize } from "./tokenizer"
 /** 可変長リレーション `*` で上限省略時に適用するホップ数の上限。 */
 const DEFAULT_MAX_HOPS = 8
 
+/** パースエラーに添える対応済み文法の案内。AS / WITH / count(DISTINCT ...) 等の非対応構文を明示する。 */
+const SUPPORTED_GRAMMAR_HINT =
+    "Supported grammar: MATCH (n:Label {prop: value})[-[:REL|REL2*1..2]->(m:Label)] [WHERE ...] RETURN [DISTINCT] n | n.prop | count(*) | count(n) | count(n.prop) | min|max|avg|sum(n.prop) [ORDER BY n.prop | count(n) [ASC|DESC]] [SKIP <int>] [LIMIT <int>]. Not supported: AS aliases, WITH, count(DISTINCT ...), CREATE/SET/DELETE (use the write tools instead)."
+
 const AGGREGATE_FUNCS = new Set<AggregateFunc>(["count", "min", "max", "avg", "sum"])
 
 /** 集計項目の正規化表記（RETURN 行キー・ORDER BY 参照に使う）。 */
@@ -428,7 +432,9 @@ class Parser {
         const token = this.peek()
         const where =
             token === undefined ? "end of query" : `"${token.value}" (position ${token.start})`
-        return new BadRequestError(`Cypher parse error: ${message}, but found ${where}`)
+        return new BadRequestError(`Cypher parse error: ${message}, but found ${where}`, {
+            hint: SUPPORTED_GRAMMAR_HINT,
+        })
     }
 }
 

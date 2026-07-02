@@ -472,6 +472,27 @@ async function computeAggregate<N>(
     if (arg.kind !== "property") {
         throw new BadRequestError(`${func}() requires a property argument`)
     }
+    if (func === "min" || func === "max") {
+        // min / max は数値に加えて文字列も比較する（数値同士は数値比較、それ以外は辞書順）。
+        const comparable_values: (number | string)[] = []
+        for (const member of members) {
+            const node = member.vars.get(arg.variable)
+            if (node === undefined) {
+                continue
+            }
+            const value = await adapter.getProperty(node, arg.property)
+            if (typeof value === "number" || typeof value === "string") {
+                comparable_values.push(value)
+            }
+        }
+        if (comparable_values.length === 0) {
+            return null
+        }
+        return comparable_values.reduce((best, value) => {
+            const comparison = compareValues(value, best)
+            return (func === "min" ? comparison < 0 : comparison > 0) ? value : best
+        })
+    }
     const values: number[] = []
     for (const member of members) {
         const node = member.vars.get(arg.variable)
@@ -488,12 +509,6 @@ async function computeAggregate<N>(
     }
     if (values.length === 0) {
         return null
-    }
-    if (func === "min") {
-        return Math.min(...values)
-    }
-    if (func === "max") {
-        return Math.max(...values)
     }
     return values.reduce((total, value) => total + value, 0) / values.length
 }
@@ -524,6 +539,20 @@ function orderValuesFromRow(orderBy: OrderItem[], row: Row): ScalarValue[] {
     return values
 }
 
+/** MATCH パターンで宣言された変数の集合を返す（集計引数の未知変数検出に使う）。 */
+function declaredVariables(query: Query): Set<string> {
+    const variables = new Set<string>()
+    if (query.pattern.start.variable !== null) {
+        variables.add(query.pattern.start.variable)
+    }
+    for (const step of query.pattern.chain) {
+        if (step.node.variable !== null) {
+            variables.add(step.node.variable)
+        }
+    }
+    return variables
+}
+
 async function evaluateAggregate<N>(
     query: Query,
     adapter: GraphAdapter<N>,
@@ -535,6 +564,15 @@ async function evaluateAggregate<N>(
     const aggregateItems = query.returns.filter(
         (item): item is AggregateItem => item.kind === "aggregate",
     )
+    // 未知変数の集計は 0 や null を黙って返さず、WHERE / RETURN / ORDER BY と同じくエラーにする。
+    const declared = declaredVariables(query)
+    for (const item of aggregateItems) {
+        if (item.arg.kind !== "star" && !declared.has(item.arg.variable)) {
+            throw new BadRequestError(`Unknown variable "${item.arg.variable}" in ${item.alias}`, {
+                hint: "Use a variable that is bound in the MATCH pattern.",
+            })
+        }
+    }
     const identityIds = new Map<unknown, number>()
     const groups = new Map<string, { first: Binding<N>; members: Binding<N>[] }>()
     const order: string[] = []
@@ -558,6 +596,16 @@ async function evaluateAggregate<N>(
         } else {
             existing.members.push(binding)
         }
+    }
+
+    // 純集計クエリ（グルーピングキー無し）は空マッチでも 1 行を返す（count / sum = 0、min / max / avg = null）。
+    // 「0 件」と「パターン不一致」をクライアントが区別する必要はなく、Cypher 標準の挙動に合わせる。
+    if (groupingItems.length === 0 && groups.size === 0) {
+        const row: Row = {}
+        for (const item of aggregateItems) {
+            row[item.alias] = await computeAggregate(item, adapter, [])
+        }
+        return [row]
     }
 
     const rows: Row[] = []
