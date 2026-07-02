@@ -18,6 +18,27 @@ export function isSupportedAudioPath(filePath: string): boolean {
     return AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase())
 }
 
+/** 絶対パス・対応形式・存在（通常ファイル）を検証する。load_sample と create_clip の audio 経路で共有する。 */
+export async function assertSampleFile(filePath: string): Promise<void> {
+    assertSamplePath(filePath)
+    try {
+        const file_stat = await stat(filePath)
+        if (!file_stat.isFile()) {
+            throw new BadRequestError("audioFilePath is not a file")
+        }
+    } catch (error) {
+        if (error instanceof BadRequestError) {
+            throw error
+        }
+        if (typeof error === "object" && error !== null && "code" in error) {
+            throw new NotFoundError(`audio file was not found: ${filePath}`, {
+                hint: "Check the absolute path exists and is readable.",
+            })
+        }
+        throw error
+    }
+}
+
 /** 絶対パス・対応形式を検証する（fs アクセスは行わない）。不正なら BadRequestError。 */
 export function assertSamplePath(filePath: string): void {
     if (!path.isAbsolute(filePath)) {
@@ -61,23 +82,9 @@ type LoadSampleParams = {
 
 async function runLoadSample(deps: ServerDeps, params: LoadSampleParams): Promise<ToolResult> {
     try {
-        assertSamplePath(params.audioFilePath)
+        await assertSampleFile(params.audioFilePath)
         const adapter = new LomGraphAdapter(deps.context)
         const simpler = resolveSimpler(await selectNodes(parseQuery(params.select), adapter))
-
-        try {
-            const file_stat = await stat(params.audioFilePath)
-            if (!file_stat.isFile()) {
-                throw new BadRequestError("audioFilePath is not a file")
-            }
-        } catch (error) {
-            if (typeof error === "object" && error !== null && "code" in error) {
-                throw new NotFoundError(`audio file was not found: ${params.audioFilePath}`, {
-                    hint: "Check the absolute path exists and is readable.",
-                })
-            }
-            throw error
-        }
 
         const summary = {
             device: { name: simpler.name },

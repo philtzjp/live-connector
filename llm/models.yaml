@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.16"
+            value: "2.17.17"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.16"
+            value: "2.17.17"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.16"
+            value: "2.17.17"
           - name: "description"
             type: "string"
             required: true
@@ -1266,11 +1266,11 @@ mcp_tools:
               type: "number"
               required: false
               constraints: ["positive"]
-              note: "MidiTrack の ClipSlot で必須。"
+              note: "MidiTrack の ClipSlot で必須。AudioTrack の ClipSlot に渡すと明示エラー（クリップ長はオーディオファイルに従う）。"
           audioFilePath:
               type: "string"
               required: false
-              note: "AudioTrack の ClipSlot で必須。"
+              note: "AudioTrack の ClipSlot で必須。MidiTrack の ClipSlot に渡すと明示エラー。load_sample と同等の事前検証（絶対パス・対応形式・存在）を行う。"
           preview:
               type: "boolean"
               required: false
@@ -1352,6 +1352,7 @@ mcp_tools:
           duplicate_device:
               input: "select(Device), preview?"
               sdk: "Track.duplicateDevice / Chain.duplicateDevice"
+              note: "ok 応答の device に複製後の実 index を含む（同名 2 件でも index で一意に select 可能）。"
           delete_session_clip:
               input: "select(ClipSlot with clip), preview?, confirm?"
               sdk: "ClipSlot.deleteClip()"
@@ -2016,7 +2017,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.16.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.17.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
