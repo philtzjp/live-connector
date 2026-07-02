@@ -7,8 +7,13 @@ vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 import { MidiClip, Song } from "@ableton-extensions/sdk"
 import type { ServerDeps } from "../deps"
 import { FakeMcpServer } from "../test-support/fake-server"
-import { clearNotesInRange, clipNoteLength, findOutOfRangeNotes, mergeNotes } from "./notes"
-import { registerNotesTool } from "./notes"
+import {
+    clearNotesInRange,
+    clipNoteLength,
+    findOutOfRangeNotes,
+    mergeNotes,
+    registerNotesTool,
+} from "./notes"
 
 function note(pitch: number, startTime: number, duration = 1): NoteDescription {
     return { pitch, startTime, duration } as unknown as NoteDescription

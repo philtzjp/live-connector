@@ -45,9 +45,13 @@ describe("structureDigest", () => {
     })
 
     it("changes when a track is renamed but count is unchanged", () => {
+        const first_track = base.tracks[0]
+        if (first_track === undefined) {
+            throw new Error("fixture must contain at least one track")
+        }
         const renamed: SetFeatures = {
             ...base,
-            tracks: [{ ...base.tracks[0]!, name: "Perc" }],
+            tracks: [{ ...first_track, name: "Perc" }],
         }
         expect(structureDigest(renamed)).not.toBe(structureDigest(base))
     })

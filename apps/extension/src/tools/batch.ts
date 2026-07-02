@@ -70,7 +70,7 @@ type ResolvedStep = {
     tool: string
     targets: number
     summary: Record<string, unknown>
-    apply: () => Promise<unknown> | void
+    apply: () => Promise<unknown>
     /** 適用直前（confirm 通過後）に旧状態をスナップショットし snapshotId を返す。 */
     captureSnapshot: () => Promise<string>
 }
@@ -119,6 +119,7 @@ async function resolveStep(
             summary: { tool: step.tool, ...plan.summary },
             apply: () => {
                 clip.notes = plan.computeNextNotes()
+                return Promise.resolve()
             },
             captureSnapshot: () =>
                 captureNotesSnapshot(deps, {
@@ -130,13 +131,13 @@ async function resolveStep(
         }
     }
 
-    const requiredLabel = SET_LABEL[step.tool] ?? "Node"
+    const required_label = SET_LABEL[step.tool] ?? "Node"
     const select = step.tool === "set_song" ? SONG_SELECT : step.select
     const nodes = await selectNodes(parseQuery(select), adapter)
     for (const node of nodes) {
-        if (!adapter.matchesLabel(node, requiredLabel)) {
+        if (!adapter.matchesLabel(node, required_label)) {
             throw new BadRequestError(
-                `${step.tool} step must select ${requiredLabel} nodes, but matched ${adapter.labelOf(node)}`,
+                `${step.tool} step must select ${required_label} nodes, but matched ${adapter.labelOf(node)}`,
             )
         }
     }
@@ -166,7 +167,7 @@ async function resolveStep(
             return capturePropertiesSnapshot(deps, {
                 tool: `batch:${step.tool}`,
                 select,
-                requiredLabel,
+                requiredLabel: required_label,
                 properties: entries.map(([property]) => property),
                 oldTargets: old_targets as Record<string, unknown>[],
                 targetIdentities: nodes.map((node) => objectIdentity(node.value)),
@@ -204,21 +205,21 @@ async function runBatch(
             }
         }
 
-        const totalTargets = resolved.reduce((sum, entry) => sum + entry.targets, 0)
+        const total_targets = resolved.reduce((sum, entry) => sum + entry.targets, 0)
         const plan = {
             stepCount: resolved.length,
-            totalTargets,
+            totalTargets: total_targets,
             steps: resolved.map((e) => e.summary),
         }
 
         if (params.preview === true) {
             return textResult({ status: "preview", ...plan })
         }
-        if (totalTargets > CONFIRM_THRESHOLD && params.confirm !== true) {
+        if (total_targets > CONFIRM_THRESHOLD && params.confirm !== true) {
             return textResult({
                 status: "confirm_required",
                 ...plan,
-                hint: `This batch modifies ${totalTargets} targets. Pass confirm:true to proceed.`,
+                hint: `This batch modifies ${total_targets} targets. Pass confirm:true to proceed.`,
             })
         }
 
@@ -290,7 +291,7 @@ async function runBatch(
                     appliedSteps: applied_steps,
                     failedSteps: failed_steps,
                     unappliedSteps: unapplied_steps,
-                    totalTargets,
+                    totalTargets: total_targets,
                     snapshots,
                     steps: resolved.map((entry) => entry.summary),
                     hint: "The SDK transaction groups undo but does not roll back: appliedSteps remain applied. Revert applied steps with restore_snapshot using the per-step snapshotId (or Live undo), then fix the failed steps and retry only those.",
@@ -302,7 +303,7 @@ async function runBatch(
         return textResult({
             status: "ok",
             appliedSteps: resolved.length,
-            totalTargets,
+            totalTargets: total_targets,
             snapshots,
             steps: resolved.map((entry) => entry.summary),
         })

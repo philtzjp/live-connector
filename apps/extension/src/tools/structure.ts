@@ -263,7 +263,9 @@ export function registerStructureTools(server: McpServer, deps: ServerDeps): voi
                 const created = await deps.context.withinTransaction(() =>
                     song.duplicateScene(scene),
                 )
-                const created_index = song.scenes.findIndex((s) => s.handle === created.handle)
+                const created_index = song.scenes.findIndex(
+                    (candidate) => candidate.handle === created.handle,
+                )
                 return textResult({
                     status: "ok",
                     scene: { index: created_index < 0 ? null : created_index, name: created.name },
@@ -346,7 +348,9 @@ export function registerStructureTools(server: McpServer, deps: ServerDeps): voi
                 const created = await deps.context.withinTransaction(() =>
                     song.duplicateTrack(track),
                 )
-                const created_index = song.tracks.findIndex((t) => t.handle === created.handle)
+                const created_index = song.tracks.findIndex(
+                    (candidate) => candidate.handle === created.handle,
+                )
                 return textResult({
                     status: "ok",
                     track: { index: created_index < 0 ? null : created_index, name: created.name },

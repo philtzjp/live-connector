@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { MidiClip, type NoteDescription } from "@ableton-extensions/sdk"
 import { parseQuery, type ScalarValue, selectNodes } from "@live-connector/cypher"
@@ -6,8 +6,8 @@ import { BadRequestError, ConfigError, NotFoundError, toMcpError } from "@live-c
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
-import { isFileMissingError } from "./history"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
+import { isFileMissingError } from "./history"
 
 const SNAPSHOT_DIRECTORY_NAME = "snapshots"
 // 1.1: targetIdentities / targetIdentity（handle.id の文字列）を追加し、identity ベース照合に対応。
@@ -62,11 +62,11 @@ export function objectIdentity(value: unknown): string | null {
     return null
 }
 
-let snapshotCounter = 0
+let snapshot_counter = 0
 
 function nextSnapshotId(): string {
-    snapshotCounter = (snapshotCounter + 1) % 1_000_000
-    return `snap-${Date.now().toString(36)}-${snapshotCounter.toString(36)}`
+    snapshot_counter = (snapshot_counter + 1) % 1_000_000
+    return `snap-${Date.now().toString(36)}-${snapshot_counter.toString(36)}`
 }
 
 function snapshotDirectory(deps: ServerDeps): string {

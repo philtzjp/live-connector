@@ -211,20 +211,20 @@ function pitchTimeSummary(notes: readonly NoteDescription[]): {
     if (notes.length === 0) {
         return { noteCount: 0, pitchRange: null, timeRange: null }
     }
-    let minPitch = Number.POSITIVE_INFINITY
-    let maxPitch = Number.NEGATIVE_INFINITY
-    let minTime = Number.POSITIVE_INFINITY
-    let maxTime = Number.NEGATIVE_INFINITY
+    let min_pitch = Number.POSITIVE_INFINITY
+    let max_pitch = Number.NEGATIVE_INFINITY
+    let min_time = Number.POSITIVE_INFINITY
+    let max_time = Number.NEGATIVE_INFINITY
     for (const note of notes) {
-        minPitch = Math.min(minPitch, note.pitch)
-        maxPitch = Math.max(maxPitch, note.pitch)
-        minTime = Math.min(minTime, note.startTime)
-        maxTime = Math.max(maxTime, note.startTime)
+        min_pitch = Math.min(min_pitch, note.pitch)
+        max_pitch = Math.max(max_pitch, note.pitch)
+        min_time = Math.min(min_time, note.startTime)
+        max_time = Math.max(max_time, note.startTime)
     }
     return {
         noteCount: notes.length,
-        pitchRange: [minPitch, maxPitch],
-        timeRange: [minTime, maxTime],
+        pitchRange: [min_pitch, max_pitch],
+        timeRange: [min_time, max_time],
     }
 }
 
@@ -336,7 +336,7 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
                 }
 
                 // notes の全置換は restore_snapshot で巻き戻せるよう、適用直前に旧 notes を保存する。
-                const snapshotId = await captureNotesSnapshot(deps, {
+                const snapshot_id = await captureNotesSnapshot(deps, {
                     tool: "transform_notes",
                     select,
                     oldNotes: existing,
@@ -347,7 +347,7 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
                     clip.notes = outcome.notes
                 })
 
-                return textResult({ status: "ok", ...summary, snapshotId })
+                return textResult({ status: "ok", ...summary, snapshotId: snapshot_id })
             } catch (error) {
                 deps.log.error("transform_notes failed", { error: String(error) })
                 return textResult(toMcpError(error), true)
