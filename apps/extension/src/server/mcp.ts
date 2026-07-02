@@ -27,7 +27,7 @@ Recommended flow: (1) call schema for labels/properties/relationships and the qu
 
 Time coordinates (two systems, do not mix): note startTime and clip markers (startMarker/endMarker/loopStart/loopEnd) are CLIP-RELATIVE beats in [0, clipLength). Clip.startTime/endTime, CuePoint.time and create_arrangement_clip/move_clip startTime are ARRANGEMENT-ABSOLUTE beats. write_notes rejects out-of-range notes unless allowOutOfRange:true.
 
-Guardrails: bulk property writes over 20 targets need confirm:true; query without LIMIT truncates at 500 rows (truncated:true); destructive delete_* tools need confirm:true. set_* and write_notes return a snapshotId; restore_snapshot rolls back. batch groups set_*/write_notes into one undo step.
+Guardrails: bulk property writes over 20 targets need confirm:true; query without LIMIT truncates at 500 rows (truncated:true); destructive delete_* tools need confirm:true. set_*, write_notes and transform_notes return a snapshotId, and batch returns per-step snapshots; restore_snapshot rolls back. batch groups set_*/write_notes into one undo step.
 
 Mixer: track volume, panning and sends are Parameters reached via (Track)-[:HAS_MIXER]->(Mixer)-[:HAS_VOLUME|HAS_PAN|HAS_SEND]->(Parameter). Read with query and write with set_device_parameter (value), not set_track.
 

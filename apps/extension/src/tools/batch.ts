@@ -6,6 +6,7 @@ import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
 import { noteSchema, planNoteWrite } from "./notes"
+import { captureNotesSnapshot, capturePropertiesSnapshot } from "./snapshots"
 import { SET_TOOL_SET_SCHEMAS } from "./write"
 
 const CONFIRM_THRESHOLD = 20
@@ -70,6 +71,8 @@ type ResolvedStep = {
     targets: number
     summary: Record<string, unknown>
     apply: () => Promise<unknown> | void
+    /** 適用直前（confirm 通過後）に旧状態をスナップショットし snapshotId を返す。 */
+    captureSnapshot: () => Promise<string>
 }
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
@@ -117,6 +120,12 @@ async function resolveStep(
             apply: () => {
                 clip.notes = plan.computeNextNotes()
             },
+            captureSnapshot: () =>
+                captureNotesSnapshot(deps, {
+                    tool: `batch:${step.tool}`,
+                    select: step.select,
+                    oldNotes: clip.notes,
+                }),
         }
     }
 
@@ -150,6 +159,16 @@ async function resolveStep(
                 }
             }
             return Promise.all(ops)
+        },
+        captureSnapshot: async () => {
+            const old_targets = await Promise.all(nodes.map((node) => adapter.serialize(node)))
+            return capturePropertiesSnapshot(deps, {
+                tool: `batch:${step.tool}`,
+                select,
+                requiredLabel,
+                properties: entries.map(([property]) => property),
+                oldTargets: old_targets as Record<string, unknown>[],
+            })
         },
     }
 }
@@ -198,6 +217,18 @@ async function runBatch(
                 status: "confirm_required",
                 ...plan,
                 hint: `This batch modifies ${totalTargets} targets. Pass confirm:true to proceed.`,
+            })
+        }
+
+        // 適用直前に各ステップの旧状態をスナップショットし、restore_snapshot で巻き戻せるようにする。
+        // 取得はすべて適用前なので、同一対象への多段ステップでは先頭ステップの snapshotId が
+        // batch 実行前の状態を表す。
+        const snapshots: { index: number; tool: string; snapshotId: string }[] = []
+        for (const entry of resolved) {
+            snapshots.push({
+                index: entry.index,
+                tool: entry.tool,
+                snapshotId: await entry.captureSnapshot(),
             })
         }
 
@@ -258,8 +289,9 @@ async function runBatch(
                     failedSteps: failed_steps,
                     unappliedSteps: unapplied_steps,
                     totalTargets,
+                    snapshots,
                     steps: resolved.map((entry) => entry.summary),
-                    hint: "The SDK transaction groups undo but does not roll back: appliedSteps remain applied. Revert with restore_snapshot / Live undo if needed, then fix the failed steps and retry only those.",
+                    hint: "The SDK transaction groups undo but does not roll back: appliedSteps remain applied. Revert applied steps with restore_snapshot using the per-step snapshotId (or Live undo), then fix the failed steps and retry only those.",
                 },
                 true,
             )
@@ -269,6 +301,7 @@ async function runBatch(
             status: "ok",
             appliedSteps: resolved.length,
             totalTargets,
+            snapshots,
             steps: resolved.map((entry) => entry.summary),
         })
     } catch (error) {
