@@ -115,6 +115,12 @@ function textResult(payload: unknown, isError = false): ToolResult {
 }
 
 async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promise<ToolResult> {
+    // notes 省略（既定 []）+ mode 省略（既定 replace）の呼び出しが全ノート無言消去にならないようにする。
+    if (params.mode !== "clear_range" && params.notes.length === 0) {
+        throw new BadRequestError(`${params.mode} mode requires a non-empty notes array`, {
+            hint: 'Pass notes like [{pitch:60, startTime:0, duration:1, velocity:100}]. To intentionally remove notes, use mode:"clear_range" with range:{start:0, end:<clipLength>}.',
+        })
+    }
     const adapter = new LomGraphAdapter(deps.context)
     const nodes = await selectNodes(parseQuery(params.select), adapter)
     if (nodes.length !== 1) {
@@ -146,11 +152,24 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         )
     }
 
+    // startTime はクリップ内だが startTime + duration が末尾を超えるノートは受理し、件数を応答で申告する。
+    // （startTime 自体の境界検証と異なり、末尾に食い込む音価は打ち込みとして正当なため拒否しない。）
+    const tail_overflow =
+        params.mode === "clear_range"
+            ? 0
+            : params.notes.filter(
+                  (input) =>
+                      input.startTime >= 0 &&
+                      input.startTime < clip_length &&
+                      input.startTime + input.duration > clip_length,
+              ).length
+
     let next_notes: NoteDescription[]
     const summary: Record<string, unknown> = {
         mode: params.mode,
         clipLength: clip_length,
         outOfRange: out_of_range.length,
+        tailOverflow: tail_overflow,
     }
 
     if (params.mode === "replace") {
@@ -171,6 +190,17 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         if (params.range.end <= params.range.start) {
             throw new BadRequestError(
                 `range.end (${params.range.end}) must be greater than range.start (${params.range.start})`,
+                {
+                    hint: "range is [start, end) in clip-relative beats and must satisfy end > start, e.g. range:{start:0, end:4}.",
+                },
+            )
+        }
+        if (params.range.start >= clip_length) {
+            throw new BadRequestError(
+                `range [${params.range.start}, ${params.range.end}) is entirely outside the clip's relative range [0, ${clip_length})`,
+                {
+                    hint: `range uses CLIP-RELATIVE beats in [0, clipLength=${clip_length}); Clip.startTime/endTime are ARRANGEMENT-ABSOLUTE beats and belong to a different coordinate system. Recompute the range relative to the clip start.`,
+                },
             )
         }
         const existing = clip.notes
@@ -205,14 +235,14 @@ export function registerNotesTool(server: McpServer, deps: ServerDeps): void {
         {
             title: "MIDI ノート書き込み",
             description:
-                "select で選んだ 1 つの MidiClip の notes を編集する。mode: replace（全置換）/ merge（既存を保持し追加。同一 pitch+startTime は入力で置換）/ clear_range（range のノートを削除）。startTime/duration はクリップ相対拍（[0, クリップ長)）。アレンジメント絶対拍とは座標系が異なる。クリップ長を超える startTime は既定で拒否（allowOutOfRange:true で許容）。",
+                "select で選んだ 1 つの MidiClip の notes を編集する。mode: replace（全置換）/ merge（既存を保持し追加。同一 pitch+startTime は入力で置換）/ clear_range（range のノートを削除）。replace / merge は notes 必須（全削除は clear_range を使う）。startTime/duration はクリップ相対拍（[0, クリップ長)）。アレンジメント絶対拍とは座標系が異なる。クリップ長を超える startTime は既定で拒否（allowOutOfRange:true で許容）。startTime + duration が末尾を超えるノートは受理し、応答の tailOverflow に件数を返す。",
             inputSchema: {
                 select: z.string().min(1).describe(selectDescription()),
                 notes: z
                     .array(noteSchema)
                     .default([])
                     .describe(
-                        "replace / merge の対象ノート。各要素は {pitch, startTime, duration, velocity?}。例: [{pitch:60, startTime:0, duration:1, velocity:100}]。clear_range では無視する",
+                        "replace / merge の対象ノート（1 件以上必須。空だとエラー）。各要素は {pitch, startTime, duration, velocity?}。例: [{pitch:60, startTime:0, duration:1, velocity:100}]。clear_range では無視する",
                     ),
                 mode: z.enum(["replace", "merge", "clear_range"]).default("replace"),
                 range: z
