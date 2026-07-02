@@ -55,6 +55,15 @@ export type HistoryEntry = {
 
 type ToolResult = { content: { type: string; text: string }[]; isError?: boolean }
 
+/** ENOENT（ファイル未作成）か。storage 障害（EACCES / EIO 等）と区別する。 */
+export function isFileMissingError(error: unknown): boolean {
+    return (
+        typeof error === "object" &&
+        error !== null &&
+        (error as { code?: unknown }).code === "ENOENT"
+    )
+}
+
 function historyDirectory(deps: ServerDeps): string {
     const storage = deps.context.environment.storageDirectory
     if (storage === undefined || storage.length === 0) {
@@ -82,6 +91,10 @@ export function summarizeInput(args: Record<string, unknown>): Record<string, un
     return out
 }
 
+/** 生成物（clip / track / device など）のネスト応答から識別に必要なフィールドだけを残す。 */
+const NESTED_OBJECT_KEYS = ["clip", "track", "device", "scene", "cuePoint", "sample"]
+const NESTED_OBJECT_FIELDS = ["index", "name", "kind", "id"]
+
 /** 結果 JSON から履歴向けの主要フィールドを抽出する。 */
 export function summarizeResult(parsed: Record<string, unknown>): Record<string, unknown> {
     const keys = [
@@ -100,11 +113,45 @@ export function summarizeResult(parsed: Record<string, unknown>): Record<string,
         "appliedSteps",
         "failedSteps",
         "unappliedSteps",
+        // restore_snapshot への導線（#50 / #96）。
+        "snapshotId",
+        "undoSnapshotId",
+        "snapshots",
     ]
     const out: Record<string, unknown> = {}
     for (const key of keys) {
         if (key in parsed) {
             out[key] = parsed[key]
+        }
+    }
+    for (const key of NESTED_OBJECT_KEYS) {
+        const value = parsed[key]
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+            continue
+        }
+        const nested = value as Record<string, unknown>
+        const kept: Record<string, unknown> = {}
+        for (const field of NESTED_OBJECT_FIELDS) {
+            if (field in nested) {
+                kept[field] = nested[field]
+            }
+        }
+        if (Object.keys(kept).length > 0) {
+            out[key] = kept
+        }
+    }
+    // batch のステップ内訳（ツール名の列）を保持する。
+    const steps = parsed.steps
+    if (Array.isArray(steps)) {
+        out.steps = {
+            count: steps.length,
+            tools: steps
+                .map((step) =>
+                    typeof step === "object" && step !== null
+                        ? (step as { tool?: unknown }).tool
+                        : undefined,
+                )
+                .filter((tool): tool is string => typeof tool === "string"),
         }
     }
     return out
@@ -208,7 +255,9 @@ async function readHistory(
     try {
         raw = await readFile(file, "utf8")
     } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error) {
+        // ENOENT（履歴未作成）のみ「空」扱い。EACCES / EIO 等の storage 障害は
+        // 空の正常応答で隠さずエラーにする（コードルール 4/5）。
+        if (isFileMissingError(error)) {
             return { count: 0, total: 0, truncated: false, entries: [] }
         }
         throw error
@@ -234,6 +283,8 @@ async function readHistory(
         return true
     })
     const limited = filtered.slice(-params.limit)
+    // 説明（新しい順に取得する）と一致させる。ファイル上は追記順＝古い順のため反転する。
+    limited.reverse()
     return {
         count: limited.length,
         total: filtered.length,

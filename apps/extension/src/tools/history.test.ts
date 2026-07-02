@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -41,6 +41,37 @@ describe("summarizeInput / summarizeResult", () => {
                 modified: 2,
             },
         )
+    })
+
+    it("keeps snapshot ids so history entries link to restore_snapshot", () => {
+        const summary = summarizeResult({
+            status: "ok",
+            snapshotId: "snap-a-1",
+            undoSnapshotId: "snap-a-2",
+        })
+        expect(summary.snapshotId).toBe("snap-a-1")
+        expect(summary.undoSnapshotId).toBe("snap-a-2")
+    })
+
+    it("keeps the identifying fields of nested creation objects", () => {
+        const summary = summarizeResult({
+            status: "ok",
+            clip: { index: 2, name: "Beat", length: 4, color: 123456 },
+            track: { index: 5, name: "Drums", kind: "midi", devices: [] },
+        })
+        expect(summary.clip).toEqual({ index: 2, name: "Beat" })
+        expect(summary.track).toEqual({ index: 5, name: "Drums", kind: "midi" })
+    })
+
+    it("keeps the batch step breakdown as tool names", () => {
+        const summary = summarizeResult({
+            status: "ok",
+            steps: [
+                { tool: "set_song", mode: undefined },
+                { tool: "write_notes", noteCount: 3 },
+            ],
+        })
+        expect(summary.steps).toEqual({ count: 2, tools: ["set_song", "write_notes"] })
     })
 })
 
@@ -89,5 +120,41 @@ describe("write history recording", () => {
         await server.call("query", { cypher: "MATCH (t:Track) RETURN t" })
         const { json } = (await server.call("get_write_history", {})) as { json: { total: number } }
         expect(json.total).toBe(0)
+    })
+
+    it("returns entries newest-first as the tool description declares", async () => {
+        const deps = buildDeps()
+        const server = new FakeMcpServer()
+        const facade = withWriteHistory(server.asMcpServer(), deps)
+        let call_index = 0
+        facade.registerTool("set_track", {}, async () => {
+            call_index++
+            return {
+                content: [
+                    { type: "text", text: JSON.stringify({ status: "ok", modified: call_index }) },
+                ],
+            }
+        })
+        registerHistoryTool(server.asMcpServer(), deps)
+
+        await server.call("set_track", { set: { name: "first" } })
+        await server.call("set_track", { set: { name: "second" } })
+        await server.call("set_track", { set: { name: "third" } })
+
+        const { json } = (await server.call("get_write_history", {})) as {
+            json: { entries: { result: { modified: number } }[] }
+        }
+        expect(json.entries.map((entry) => entry.result.modified)).toEqual([3, 2, 1])
+    })
+
+    it("surfaces storage failures instead of returning an empty ok response", async () => {
+        const deps = buildDeps()
+        // 履歴ファイルのパスをディレクトリにして EISDIR を誘発する（ENOENT 以外の fs 障害の代表）。
+        await mkdir(path.join(storageDir, "history", "write-history.jsonl"), { recursive: true })
+        const server = new FakeMcpServer()
+        registerHistoryTool(server.asMcpServer(), deps)
+
+        const { isError } = await server.call("get_write_history", {})
+        expect(isError).toBe(true)
     })
 })
