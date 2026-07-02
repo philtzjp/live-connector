@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.4"
+            value: "2.17.5"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.4"
+            value: "2.17.5"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.4"
+            value: "2.17.5"
           - name: "description"
             type: "string"
             required: true
@@ -1990,7 +1990,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.4.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.5.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
@@ -2352,6 +2352,15 @@ cypher_contract:
             - "create_arrangement_clip"
             - "delete_arrangement_clip"
             - "delete_cue_point"
+            - "move_clip"
+            - "trim_clip"
+            - "delete_scene"
+            - "duplicate_scene"
+            - "delete_track"
+            - "duplicate_track"
+            - "delete_device"
+            - "duplicate_device"
+            - "delete_session_clip"
             - "render_audio"
             - "set_track"
             - "set_clip"
@@ -2363,6 +2372,7 @@ cypher_contract:
             - "write_notes"
             - "transform_notes"
             - "load_sample"
+        tools_note: "トップレベル入力に select を受け取る全ツール（registerAllTools との突合テスト select-contract.test.ts で固定）。batch はステップ内 select のため対象外。"
         required: "RETURN exactly one bound node variable"
         order_by: "ORDER BY は RETURN 変数のプロパティのみ許可（identity 重複排除 → 並べ替え → SKIP / LIMIT の順で適用）。他変数のプロパティ・集計・裸変数の ORDER BY は hint 付き BadRequestError。"
         valid_examples:
