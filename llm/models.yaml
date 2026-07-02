@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.6"
+            value: "2.17.7"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.6"
+            value: "2.17.7"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.6"
+            value: "2.17.7"
           - name: "description"
             type: "string"
             required: true
@@ -1595,7 +1595,7 @@ mcp_tools:
 
     - name: "transform_notes"
       source: "apps/extension/src/tools/transform-notes.ts"
-      note: "select で選んだ MidiClip の notes を決定的変換する。クリップ相対座標。pitch 0..127 外は削除、startTime [0,クリップ長) 外は onOutOfRange で drop/error。"
+      note: "select で選んだ MidiClip の notes を決定的変換する。クリップ相対座標。startTime [0,クリップ長) 外・pitch 0..127 外はどちらも onOutOfRange に従う（error=変換全体を拒否が既定。write_notes の境界検証と同じ方針）。quantize は末尾を超えないよう範囲内の直前グリッドへ丸め、ノートを削除しない。"
       input:
           select:
               type: "string"
@@ -1612,7 +1612,8 @@ mcp_tools:
           onOutOfRange:
               type: "\"drop\" | \"error\""
               required: false
-              default: "drop"
+              default: "error"
+              note: "error=範囲外ノートが出る変換を拒否（既定）/ drop=範囲外ノートを削除（明示 opt-in）。"
           preview:
               type: "boolean"
               required: false
@@ -1990,7 +1991,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.6.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.7.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
