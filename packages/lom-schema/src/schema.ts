@@ -62,9 +62,12 @@ export const query_contract: QueryContract = {
     select: {
         tools: [
             "create_clip",
+            "insert_device",
             "create_arrangement_clip",
             "delete_arrangement_clip",
             "delete_cue_point",
+            "move_clip",
+            "trim_clip",
             "delete_scene",
             "duplicate_scene",
             "delete_track",

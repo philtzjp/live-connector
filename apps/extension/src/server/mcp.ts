@@ -40,8 +40,11 @@ export type RegisteredToolsSummary = {
     names: string[]
 }
 
-/** すべての MCP ツールを登録する（createMcpServer と describeRegisteredTools で共通の登録経路）。 */
-function registerAllTools(server: McpServer, deps: ServerDeps): void {
+/**
+ * すべての MCP ツールを登録する（createMcpServer と describeRegisteredTools で共通の登録経路）。
+ * テストからも参照し、登録ツールの inputSchema と lom-schema の契約一覧の突合に使う。
+ */
+export function registerAllTools(server: McpServer, deps: ServerDeps): void {
     registerSchemaTool(server, deps)
     registerOverviewTool(server, deps)
     registerQueryTool(server, deps)
