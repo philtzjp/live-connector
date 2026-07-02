@@ -42,3 +42,66 @@ describe("applyRowCap", () => {
         expect(result.hint).toMatch(/SKIP/)
     })
 })
+
+import { MidiClip, MidiTrack, Song } from "@ableton-extensions/sdk"
+import type { ServerDeps } from "../deps"
+import { FakeMcpServer } from "../test-support/fake-server"
+import { registerQueryTool } from "./query"
+
+function buildQueryServer(note_count: number): FakeMcpServer {
+    const notes = Array.from({ length: note_count }, (_, index) => ({
+        pitch: 60 + (index % 12),
+        startTime: index * 0.25,
+        duration: 0.25,
+    }))
+    const clip = Object.assign(Object.create(MidiClip.prototype), {
+        name: "Long",
+        handle: { id: 41n },
+        notes,
+    })
+    const track = Object.assign(Object.create(MidiTrack.prototype), {
+        name: "Drums",
+        handle: { id: 1n },
+        clipSlots: [{ clip }],
+        arrangementClips: [],
+        devices: [],
+    })
+    const song = Object.assign(Object.create(Song.prototype), {
+        tracks: [track],
+        returnTracks: [],
+        scenes: [],
+        cuePoints: [],
+        mainTrack: {},
+    })
+    const deps = {
+        context: { application: { song } },
+        log: { debug() {}, info() {}, warn() {}, error() {} },
+    } as unknown as ServerDeps
+    const server = new FakeMcpServer()
+    registerQueryTool(server.asMcpServer(), deps)
+    return server
+}
+
+describe("query handler row-cap wiring", () => {
+    it("truncates at the default cap when LIMIT is omitted", async () => {
+        const server = buildQueryServer(DEFAULT_ROW_LIMIT + 20)
+        const { isError, json } = await server.call("query", {
+            cypher: "MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN n.pitch",
+        })
+        expect(isError).toBe(false)
+        const payload = json as { count: number; truncated: boolean; hint?: string }
+        expect(payload.truncated).toBe(true)
+        expect(payload.count).toBe(DEFAULT_ROW_LIMIT)
+        expect(payload.hint).toContain("LIMIT")
+    })
+
+    it("honours an explicit LIMIT below the absolute cap", async () => {
+        const server = buildQueryServer(DEFAULT_ROW_LIMIT + 20)
+        const { json } = await server.call("query", {
+            cypher: `MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN n.pitch LIMIT ${DEFAULT_ROW_LIMIT + 10}`,
+        })
+        const payload = json as { count: number; truncated: boolean }
+        expect(payload.truncated).toBe(false)
+        expect(payload.count).toBe(DEFAULT_ROW_LIMIT + 10)
+    })
+})
