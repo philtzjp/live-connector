@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.14"
+            value: "2.17.15"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.14"
+            value: "2.17.15"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.14"
+            value: "2.17.15"
           - name: "description"
             type: "string"
             required: true
@@ -737,7 +737,7 @@ mcp_tools:
     - name: "McpServerMetadata"
       kind: "mcp_metadata"
       source: "apps/extension/src/server/mcp.ts"
-      note: "initialize 応答の instructions（推奨手順・時刻座標・ガードレール・ミキサー経路の要約）と、withToolAnnotations facade による tool annotations（read=readOnlyHint / delete_*=destructiveHint / set_*・apply_device_state・restore_snapshot=idempotentHint）。annotations の正本は apps/extension/src/server/annotations.ts の TOOL_ANNOTATIONS。"
+      note: "initialize 応答の instructions（推奨手順・時刻座標・ガードレール・ミキサー経路の要約）と、withToolAnnotations facade による tool annotations。区分: read=readOnlyHint / delete_*・write_notes・transform_notes・batch=destructiveHint（MCP 仕様の destructiveHint:false は additive のみのため、置換・削除を行うツールは true）/ restore_snapshot・load_sample=destructive かつ idempotent（置換書き込み）/ set_*・apply_device_state・move_clip・trim_clip=idempotentHint（絶対指定の再適用同結果）。正本は apps/extension/src/server/annotations.ts の TOOL_ANNOTATIONS で、登録ツールとの網羅一致は annotations.test.ts で固定。"
       decisions:
           mixer_write: "volume/panning/send は HAS_MIXER→Parameter 経由で set_device_parameter に統一する（set_track へ直接プロパティ追加はしない）。理由: ミキサー値は min/max/quantized を持つ Parameter で set_device_parameter が一貫して扱えるため。"
           mcp_prompts: "本 release では MCP prompts を採用しない。定型ワークフローの配布は instructions で代替する。採用時は別 Issue に分割する。"
@@ -2005,7 +2005,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.14.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.15.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"

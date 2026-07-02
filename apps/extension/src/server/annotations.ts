@@ -20,7 +20,12 @@ const CREATE_WRITE: ToolAnnotations = {
     idempotentHint: false,
 }
 const DESTRUCTIVE: ToolAnnotations = { readOnlyHint: false, destructiveHint: true }
-const NEUTRAL_WRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false }
+/** 既存内容を置換する書き込み（同じ入力の再適用は同結果）。 */
+const REPLACING_WRITE: ToolAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+}
 
 /** ツール名 → annotations の正本。read 系 / 破壊系 / 冪等書き込みなどを宣言的に区別する。 */
 export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
@@ -43,7 +48,8 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     set_cue_point: IDEMPOTENT_WRITE,
     set_device_parameter: IDEMPOTENT_WRITE,
     apply_device_state: IDEMPOTENT_WRITE,
-    restore_snapshot: IDEMPOTENT_WRITE,
+    // スナップショット取得後の変更を上書きするため destructive（同一 id の再適用は同結果）
+    restore_snapshot: REPLACING_WRITE,
     // creating writes（毎回新規生成）
     create_clip: CREATE_WRITE,
     create_track: CREATE_WRITE,
@@ -54,7 +60,8 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     duplicate_scene: CREATE_WRITE,
     duplicate_track: CREATE_WRITE,
     duplicate_device: CREATE_WRITE,
-    load_sample: CREATE_WRITE,
+    // Simpler の既存サンプルを置換する（新規生成ではない）
+    load_sample: REPLACING_WRITE,
     // destructive deletes
     delete_scene: DESTRUCTIVE,
     delete_track: DESTRUCTIVE,
@@ -62,12 +69,14 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     delete_session_clip: DESTRUCTIVE,
     delete_arrangement_clip: DESTRUCTIVE,
     delete_cue_point: DESTRUCTIVE,
-    // other Set writes
-    write_notes: NEUTRAL_WRITE,
-    transform_notes: NEUTRAL_WRITE,
-    move_clip: NEUTRAL_WRITE,
-    trim_clip: NEUTRAL_WRITE,
-    batch: NEUTRAL_WRITE,
+    // 既存 notes を置換・削除し得るため destructive（MCP 仕様の destructiveHint:false は additive のみ）
+    write_notes: DESTRUCTIVE,
+    transform_notes: DESTRUCTIVE,
+    // 置換・削除を内包できる（write_notes の replace / clear_range）
+    batch: DESTRUCTIVE,
+    // 絶対指定のため再実行は同結果
+    move_clip: IDEMPOTENT_WRITE,
+    trim_clip: IDEMPOTENT_WRITE,
     // 一時トラックで試行し即削除する検証ツール（Set に残留せず、再実行で同結果）
     verify_device_catalog: IDEMPOTENT_WRITE,
 }
