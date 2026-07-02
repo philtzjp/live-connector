@@ -1,6 +1,7 @@
 import type { MidiTrack } from "@ableton-extensions/sdk"
 import { toMcpError } from "@live-connector/error"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { CATALOG_DEVICE_NAMES } from "./devices"
 
@@ -50,21 +51,69 @@ async function probeCatalog(track: MidiTrack<V>, deps: ServerDeps): Promise<Cata
     return results
 }
 
-async function runVerifyDeviceCatalog(deps: ServerDeps): Promise<ToolResult> {
+type VerifyCatalogParams = {
+    preview: boolean | undefined
+    confirm: boolean | undefined
+}
+
+/** 実行内容の事前提示（preview / confirm_required で返す計画）。 */
+function catalogPlan(): Record<string, unknown> {
+    return {
+        devices: CATALOG_DEVICE_NAMES.length,
+        note: `Creates 1 temporary MidiTrack, inserts and immediately deletes ${CATALOG_DEVICE_NAMES.length} devices on it, then deletes the track. Adds roughly ${CATALOG_DEVICE_NAMES.length * 2 + 2} entries to Live's undo history (the SDK cannot batch them into one step because each delete depends on the awaited insert result).`,
+    }
+}
+
+async function runVerifyDeviceCatalog(
+    deps: ServerDeps,
+    params: VerifyCatalogParams,
+): Promise<ToolResult> {
+    if (params.preview === true) {
+        return textResult({ status: "preview", ...catalogPlan() })
+    }
+    if (params.confirm !== true) {
+        return textResult({
+            status: "confirm_required",
+            ...catalogPlan(),
+            hint: "This probe temporarily mutates the Set and floods Live's undo history. Pass confirm:true to proceed.",
+        })
+    }
     const song = deps.context.application.song
     let track: MidiTrack<V> | undefined
     try {
         track = await deps.context.withinTransaction(() => song.createMidiTrack())
         const results = await probeCatalog(track, deps)
-        return textResult({ status: "ok", ...summarizeCatalogResults(results) })
+        // 掃除（一時トラック削除）の成否を応答に反映する。失敗時は Set に残留するため警告を返す。
+        const temp_track = track
+        track = undefined
+        let cleanup: "ok" | "failed" = "ok"
+        let cleanup_error: string | undefined
+        try {
+            await deps.context.withinTransaction(() => song.deleteTrack(temp_track))
+        } catch (error) {
+            cleanup = "failed"
+            cleanup_error = String(error)
+            deps.log.error("verify_device_catalog cleanup failed", { error: cleanup_error })
+        }
+        const payload: Record<string, unknown> = {
+            status: "ok",
+            ...summarizeCatalogResults(results),
+            cleanup,
+        }
+        if (cleanup_error !== undefined) {
+            payload.cleanupError = cleanup_error
+            payload.warning =
+                "The temporary MidiTrack could not be deleted and remains in the Set. Remove it with delete_track or Live undo."
+        }
+        return textResult(payload)
     } catch (error) {
         deps.log.error("verify_device_catalog failed", { error: String(error) })
         return textResult(toMcpError(error), true)
     } finally {
         if (track !== undefined) {
-            const temp_track = track
+            const leftover_track = track
             await deps.context
-                .withinTransaction(() => song.deleteTrack(temp_track))
+                .withinTransaction(() => song.deleteTrack(leftover_track))
                 .catch((error: unknown) => {
                     deps.log.error("verify_device_catalog cleanup failed", {
                         error: String(error),
@@ -81,9 +130,15 @@ export function registerCatalogTools(server: McpServer, deps: ServerDeps): void 
         {
             title: "内蔵デバイスカタログ検証",
             description:
-                "内蔵デバイスカタログ全項目を一時 MidiTrack へ挿入試行し、挿入可否の一覧を返す。各デバイスは即時削除し、一時トラックも最後に削除するため Set に残留しない（Live の undo 履歴には試行の記録が残る）。失敗項目はカタログから除外するか実ロード名を調査する。",
-            inputSchema: {},
+                "内蔵デバイスカタログ全項目を一時 MidiTrack へ挿入試行し、挿入可否の一覧を返す（confirm:true 必須。無しは実行せず confirm_required と実行計画を返す）。各デバイスは即時削除し、一時トラックも最後に削除するため Set に残留しない（Live の undo 履歴にはデバイス数の約 2 倍の試行記録が残る。挿入結果に依存する削除を同期開始できないため SDK 制約で 1 undo ステップに束ねられない）。掃除に失敗した場合は応答の cleanup:failed と warning で申告する。失敗項目はカタログから除外するか実ロード名を調査する。",
+            inputSchema: {
+                preview: z.boolean().optional().describe("実行せず実行計画を返す"),
+                confirm: z
+                    .boolean()
+                    .optional()
+                    .describe("Set の一時変更と undo 履歴への大量記録を許可する"),
+            },
         },
-        async () => runVerifyDeviceCatalog(deps),
+        async ({ preview, confirm }) => runVerifyDeviceCatalog(deps, { preview, confirm }),
     )
 }
