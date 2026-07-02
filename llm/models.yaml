@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.9"
+            value: "2.17.10"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.9"
+            value: "2.17.10"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.9"
+            value: "2.17.10"
           - name: "description"
             type: "string"
             required: true
@@ -897,8 +897,8 @@ mcp_tools:
       tools:
           restore_snapshot:
               input: "snapshotId: string"
-              output: "status:ok + restored / matchedNow / snapshotTargets / note（best-effort。対象削除・移動時は復元不可）"
-              note: "select を再解決して旧プロパティ値 / 旧 notes を書き戻す。構造操作・非可逆属性は対象外。"
+              output: "status:ok + restored / matchedNow / snapshotTargets / missingFromSet / unmatchedNow / undoSnapshotId / note?（部分復元時）"
+              note: "select を再解決し、対象を identity（Handle.id、schemaVersion 1.1 の targetIdentities）で照合して旧プロパティ値 / 旧 notes を書き戻す。requiredLabel を復元時にも検証。identity 不可の環境では件数一致時のみ index 照合（不一致は拒否＝順ズレ適用防止）。対象が全て消えた場合・破損ファイル・schemaVersion 不一致は hint 付きエラー。復元前の現在値を自動スナップショット（tool:restore_snapshot）し undoSnapshotId で返す。構造操作・非可逆属性は対象外。"
           list_snapshots:
               input: "limit?: number(<=100, 既定 50)"
               output: "count / total / truncated / snapshots[{ id, at, tool, kind, select }]"
@@ -1996,7 +1996,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.9.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.10.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
