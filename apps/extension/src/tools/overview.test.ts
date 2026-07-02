@@ -44,7 +44,8 @@ function buildDeps(): ServerDeps {
         arrangementClips: [],
     })
     const song = {
-        handle: 1,
+        // 実機 SDK の Handle.id は bigint（JSON.stringify 非対応）なので、フェイクも bigint で再現する。
+        handle: { id: 7n },
         tempo: 128,
         scaleName: "Minor",
         scaleMode: true,
@@ -109,7 +110,7 @@ describe("get_overview", () => {
             }
         }
         expect(json.identity.storageDirectory).toBe("/tmp/live-connector")
-        expect(json.identity.songHandle).toBe(1)
+        expect(json.identity.songHandle).toBe("7")
         expect(json.structureDigest).toMatch(/^[0-9a-f]{8}$/)
     })
 

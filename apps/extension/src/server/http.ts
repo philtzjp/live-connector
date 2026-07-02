@@ -13,7 +13,7 @@ import {
 } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js"
 import type { ServerDeps } from "../deps"
-import { collectSetFeatures, structureDigest } from "../lom/fingerprint"
+import { collectSetFeatures, serializeSongHandle, structureDigest } from "../lom/fingerprint"
 import { SERVICE_VERSION } from "../version"
 import { createMcpServer, describeRegisteredTools } from "./mcp"
 
@@ -198,6 +198,35 @@ async function closeMcpSession(
     }
 }
 
+/** /health 応答のペイロードを構築する。songHandle は bigint を含むため文字列へ直列化する。 */
+export function buildHealthPayload(context: { deps: ServerDeps; log: Logger }): {
+    status: string
+    version: string
+    description: string
+    tools: ReturnType<typeof describeRegisteredTools>
+    structure: { digest: string; songHandle: string } | null
+} {
+    const tools = describeRegisteredTools(context.deps)
+    // 接続先 Set の構造変化を認証なしで外形検知できるよう、非 PII のダイジェストのみ載せる。
+    let structure: { digest: string; songHandle: string } | null = null
+    try {
+        const song = context.deps.context.application.song
+        structure = {
+            digest: structureDigest(collectSetFeatures(song)),
+            songHandle: serializeSongHandle(song.handle),
+        }
+    } catch (error) {
+        context.log.error("health structure digest failed", { error: String(error) })
+    }
+    return {
+        status: "pass",
+        version: SERVICE_VERSION,
+        description: "live-connector MCP server",
+        tools,
+        structure,
+    }
+}
+
 function handleHealth(
     context: RequestContext,
     request: IncomingMessage,
@@ -210,22 +239,7 @@ function handleHealth(
         )
         return
     }
-    const tools = describeRegisteredTools(context.deps)
-    // 接続先 Set の構造変化を認証なしで外形検知できるよう、非 PII のダイジェストのみ載せる。
-    let structure: { digest: string; songHandle: unknown } | null = null
-    try {
-        const song = context.deps.context.application.song
-        structure = { digest: structureDigest(collectSetFeatures(song)), songHandle: song.handle }
-    } catch (error) {
-        context.log.error("health structure digest failed", { error: String(error) })
-    }
-    writeJson(response, 200, "application/health+json", {
-        status: "pass",
-        version: SERVICE_VERSION,
-        description: "live-connector MCP server",
-        tools,
-        structure,
-    })
+    writeJson(response, 200, "application/health+json", buildHealthPayload(context))
 }
 
 async function handleMcp(

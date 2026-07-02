@@ -30,7 +30,7 @@ export type SetFeatures = {
 
 export type SetIdentity = {
     storageDirectory: string | null
-    songHandle: unknown
+    songHandle: string
     sdkNote: string
 }
 
@@ -83,12 +83,20 @@ export function structureDigest(features: SetFeatures): string {
     return hash.toString(16).padStart(8, "0")
 }
 
+/**
+ * SDK の Handle を JSON 直列化可能な表現へ変換する。
+ * Handle.id は bigint のため、生のまま応答へ含めると JSON.stringify が TypeError を投げる。
+ */
+export function serializeSongHandle(handle: { id: bigint }): string {
+    return String(handle.id)
+}
+
 /** SDK から取得可能な接続先 Set の識別情報。 */
 export function setIdentity(context: ExtensionContext<V>): SetIdentity {
     const storage = context.environment.storageDirectory
     return {
         storageDirectory: storage === undefined || storage.length === 0 ? null : storage,
-        songHandle: context.application.song.handle,
+        songHandle: serializeSongHandle(context.application.song.handle),
         sdkNote: SDK_IDENTITY_NOTE,
     }
 }
