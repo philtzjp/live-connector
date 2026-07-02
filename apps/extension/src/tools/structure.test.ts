@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
-import { MidiTrack } from "@ableton-extensions/sdk"
+import { Device, MidiTrack } from "@ableton-extensions/sdk"
 import type { ServerDeps } from "../deps"
 import { FakeMcpServer } from "../test-support/fake-server"
 import { guardDestructive, registerStructureTools } from "./structure"
@@ -76,5 +76,56 @@ describe("create_track", () => {
         expect(json.status).toBe("ok")
         expect(json.track).toMatchObject({ index: 0, name: "Lead", kind: "midi" })
         expect(track.name).toBe("Lead")
+    })
+})
+
+describe("duplicate_device", () => {
+    it("returns the index of the duplicated device so it can be selected uniquely", async () => {
+        const original = Object.assign(Object.create(Device.prototype), {
+            name: "Operator",
+            handle: { id: 31n },
+        })
+        const track: Record<string, unknown> = Object.assign(Object.create(MidiTrack.prototype), {
+            name: "Lead",
+            handle: { id: 1n },
+            clipSlots: [],
+            arrangementClips: [],
+            devices: [original],
+        })
+        original.parent = track
+        track.duplicateDevice = (source: { name: string }) => {
+            const copy = Object.assign(Object.create(Device.prototype), {
+                name: source.name,
+                handle: { id: 32n },
+                parent: track,
+            })
+            // SDK 仕様: 複製は元の直後に挿入される。
+            ;(track.devices as unknown[]).splice(1, 0, copy)
+            return Promise.resolve(copy)
+        }
+        const song = {
+            tracks: [track],
+            returnTracks: [],
+            scenes: [],
+            cuePoints: [],
+            mainTrack: {},
+        }
+        const deps = {
+            context: {
+                application: { song },
+                withinTransaction: (fn: () => unknown) => fn(),
+            },
+            log: { debug() {}, info() {}, warn() {}, error() {} },
+        } as unknown as ServerDeps
+        const server = new FakeMcpServer()
+        registerStructureTools(server.asMcpServer(), deps)
+
+        const { isError, json } = await server.call("duplicate_device", {
+            select: 'MATCH (:MidiTrack {name:"Lead"})-[:HAS_DEVICE]->(d:Device {name:"Operator"}) RETURN d',
+        })
+        expect(isError).toBe(false)
+        const payload = json as { status: string; device: { name: string; index: number } }
+        expect(payload.status).toBe("ok")
+        expect(payload.device).toEqual({ name: "Operator", index: 1 })
     })
 })

@@ -13,6 +13,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
+import { assertSampleFile } from "./samples"
 
 type V = TargetApiVersion
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
@@ -90,6 +91,12 @@ async function createClip(
     params: CreateClipParams,
 ): Promise<Clip<V>> {
     if (track instanceof MidiTrack) {
+        if (params.audioFilePath !== undefined) {
+            throw new BadRequestError(
+                "audioFilePath cannot be used on a MidiTrack slot (it creates a MidiClip)",
+                { hint: "Pass length (beats) for MidiTrack slots, or select an AudioTrack slot." },
+            )
+        }
         if (params.length === undefined) {
             throw new BadRequestError("length (beats) is required to create a MidiClip", {
                 hint: "Pass length for MidiTrack slots.",
@@ -98,11 +105,19 @@ async function createClip(
         const length = params.length
         return context.withinTransaction(() => slot.createMidiClip(length))
     }
+    if (params.length !== undefined) {
+        throw new BadRequestError(
+            "length cannot be used on an AudioTrack slot (the clip length follows the audio file)",
+            { hint: "Pass audioFilePath for AudioTrack slots, or select a MidiTrack slot." },
+        )
+    }
     if (params.audioFilePath === undefined) {
         throw new BadRequestError("audioFilePath is required to create an audio session clip", {
             hint: "Pass audioFilePath for AudioTrack slots.",
         })
     }
+    // load_sample と同等の事前検証（絶対パス・対応形式・存在）。SDK の生エラーを防ぐ。
+    await assertSampleFile(params.audioFilePath)
     const filePath = params.audioFilePath
     return context.withinTransaction(() => slot.createAudioClip({ filePath }))
 }
@@ -155,7 +170,7 @@ export function registerCreateTools(server: McpServer, deps: ServerDeps): void {
         {
             title: "Session Clip 生成",
             description:
-                "select で選んだ 1 つの空 ClipSlot にセッションクリップを生成する。MidiTrack の ClipSlot は length（beats）で空 MidiClip、AudioTrack の ClipSlot は audioFilePath で AudioClip を作る。",
+                "select で選んだ 1 つの空 ClipSlot にセッションクリップを生成する。MidiTrack の ClipSlot は length（beats）で空 MidiClip、AudioTrack の ClipSlot は audioFilePath（絶対パス・対応形式・存在を事前検証）で AudioClip を作る。無効な組み合わせ（MidiTrack + audioFilePath / AudioTrack + length）は明示エラー。",
             inputSchema: {
                 select: z.string().min(1).describe(selectDescription()),
                 length: z

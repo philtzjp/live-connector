@@ -40,7 +40,7 @@ export function guardDestructive(
         return textResult({
             status: "confirm_required",
             ...summary,
-            hint: "This is a destructive, non-undoable operation. Pass confirm:true to proceed.",
+            hint: "This is a destructive operation that cannot be undone from MCP (Live's Edit > Undo can still revert it). Pass confirm:true to proceed.",
         })
     }
     return null
@@ -437,7 +437,14 @@ export function registerStructureTools(server: McpServer, deps: ServerDeps): voi
                 const created = await deps.context.withinTransaction(() =>
                     parent.duplicateDevice(device),
                 )
-                return textResult({ status: "ok", device: { name: created.name } })
+                // 同名デバイスが並んだ直後でも index で一意に select できるよう、複製後の実 index を返す。
+                const created_index = parent.devices.findIndex(
+                    (candidate) => candidate.handle === created.handle,
+                )
+                return textResult({
+                    status: "ok",
+                    device: { name: created.name, index: created_index < 0 ? null : created_index },
+                })
             } catch (error) {
                 deps.log.error("duplicate_device failed", { error: String(error) })
                 return textResult(toMcpError(error), true)
