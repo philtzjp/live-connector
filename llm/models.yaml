@@ -2467,3 +2467,17 @@ examples:
             - "MATCH (c:MidiClip {index:0})-[:HAS_NOTE]->(n:Note) WHERE n.pitch >= 60 RETURN n"
             - "MATCH (c:MidiClip)-[:HAS_NOTE]->(n:Note) RETURN c.name, count(n), max(n.pitch) ORDER BY count(n) DESC"
             - "MATCH (t:Track)-[:HAS_ARRANGEMENT_CLIP]->(c:Clip) RETURN c.name, c.startTime ORDER BY c.startTime SKIP 0 LIMIT 20"
+
+decisions:
+    structure_tool_aggregation_104:
+        date: "2026-07-02"
+        issue: "#104"
+        decision: "構造操作の個別ツール（create / delete / duplicate × scene / track / device、session clip 等）を維持し、原設計 §3C の create_object / delete_object / duplicate_object（type 引数 + 型付き args）への集約は採用しない。"
+        context: "MCP-DESIGN.md の中心思想は「操作ごとのツール化は 40 個を超えるとエージェントが混乱する。表現力はツール数でなくクエリ言語＋スキーマ内省に寄せる」。PR #73 で構造操作が個別ツールとして追加され、レビュー時点の登録ツール数は 41 で閾値を超えていた（2.17.17 時点では 39。annotations.test.ts の網羅一致テストが登録数と一致を保証）。"
+        rationale:
+            - "zod 検証の粒度: 個別ツールは対象種別ごとの入力スキーマ（create_track の kind、create_clip の length / audioFilePath 相互排他、delete_session_clip の ClipSlot 制約等）を静的に宣言でき、MCP クライアントが tools/list のスキーマだけで正しい引数を組める。type 引数 + discriminated union でも表現はできるが、クライアントのスキーマ表示・エラー位置特定が 1 段深くなる。"
+            - "annotations の粒度: #92 で destructive / idempotent 区分を実態に合わせたばかりで、自動承認判断はツール単位で機能している。delete_object へ集約すると全 type が一律 destructive になり粒度は保てるが、create_object は種別ごとに confirm ガードの要否が異なり（例: create_track は非破壊、delete 系は confirm 必須）単一ツールでは表現が濁る。"
+            - "発見性: instructions（#63）と annotations により 39 ツールでの発見性劣化は緩和済み。ツール数削減効果は約 10 個で、tools/list のコンテキスト消費削減は限定的。"
+            - "互換性: 集約は既存 10 ツールの削除または並行残置を要し、既存クライアント（書き込み履歴・スナップショット・batch 対象外リストの参照を含む）への破壊的変更となる。現時点で得られる便益が移行コストを下回る。"
+            - "閾値との関係: 現在 39 ツールで設計閾値 40 以下。今後のツール追加で 40 を継続的に超える場合は、新規追加を集約形式で設計する（既存の個別ツールは残置）方針で再検討する。"
+        revisit_when: "登録ツール数が 45 を超えたとき、または MCP クライアント側でツール一覧のコンテキスト消費が実測で問題化したとき。"
