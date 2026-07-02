@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.1"
+            value: "2.17.2"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.1"
+            value: "2.17.2"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.1"
+            value: "2.17.2"
           - name: "description"
             type: "string"
             required: true
@@ -222,9 +222,9 @@ models:
             required: true
             note: "describeRegisteredTools(deps) の結果。稼働ホストのツール構成を外形確認する。"
           - name: "structure"
-            type: "{ digest: string; songHandle: unknown } | null"
+            type: "{ digest: string; songHandle: string } | null"
             required: true
-            note: "接続先 Set の構造ダイジェストと songHandle。認証なしのため非 PII のみ（storageDirectory は含めない）。読み取り失敗時は null。"
+            note: "接続先 Set の構造ダイジェストと songHandle。songHandle は SDK Handle.id（bigint、JSON.stringify 不可）を String 化した値。認証なしのため非 PII のみ（storageDirectory は含めない）。読み取り失敗時は null。"
 
     - name: "HttpEndpoint"
       kind: "http_contract"
@@ -775,7 +775,7 @@ mcp_tools:
           content:
               type: "TextContent[]"
               text_json_shape:
-                  identity: "SetIdentity { storageDirectory: string|null, songHandle: unknown, sdkNote: string }"
+                  identity: "SetIdentity { storageDirectory: string|null, songHandle: string, sdkNote: string }"
                   structureDigest: "string（構造フィンガープリント djb2 8 桁 hex）"
                   tempo: "number"
                   scale:
@@ -1990,7 +1990,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.1.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.2.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
