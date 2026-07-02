@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
-import { capturePropertiesSnapshot } from "./snapshots"
+import { capturePropertiesSnapshot, objectIdentity } from "./snapshots"
 
 /** これを超える件数の変更は confirm:true を要求する。 */
 const CONFIRM_THRESHOLD = 20
@@ -115,6 +115,7 @@ async function runSetTool(
             requiredLabel,
             properties: entries.map(([property]) => property),
             oldTargets,
+            targetIdentities: nodes.map((node) => objectIdentity(node.value)),
         })
 
         await deps.context.withinTransaction(() => {

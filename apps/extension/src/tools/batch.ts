@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter, type LomNode } from "../lom/adapter"
 import { noteSchema, planNoteWrite } from "./notes"
-import { captureNotesSnapshot, capturePropertiesSnapshot } from "./snapshots"
+import { captureNotesSnapshot, capturePropertiesSnapshot, objectIdentity } from "./snapshots"
 import { SET_TOOL_SET_SCHEMAS } from "./write"
 
 const CONFIRM_THRESHOLD = 20
@@ -125,6 +125,7 @@ async function resolveStep(
                     tool: `batch:${step.tool}`,
                     select: step.select,
                     oldNotes: clip.notes,
+                    targetIdentity: objectIdentity(clip),
                 }),
         }
     }
@@ -168,6 +169,7 @@ async function resolveStep(
                 requiredLabel,
                 properties: entries.map(([property]) => property),
                 oldTargets: old_targets as Record<string, unknown>[],
+                targetIdentities: nodes.map((node) => objectIdentity(node.value)),
             })
         },
     }

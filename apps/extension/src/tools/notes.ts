@@ -5,7 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps, TargetApiVersion } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
-import { captureNotesSnapshot } from "./snapshots"
+import { captureNotesSnapshot, objectIdentity } from "./snapshots"
 
 export const noteSchema = z.object({
     pitch: z.number().int().min(0).max(127).describe("MIDI ノート番号 0-127（60=C3）"),
@@ -258,6 +258,7 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
         tool: "write_notes",
         select: params.select,
         oldNotes: clip.notes,
+        targetIdentity: objectIdentity(clip),
     })
 
     deps.context.withinTransaction(() => {

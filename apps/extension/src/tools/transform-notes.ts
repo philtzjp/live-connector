@@ -6,7 +6,7 @@ import { z } from "zod"
 import type { ServerDeps } from "../deps"
 import { LomGraphAdapter } from "../lom/adapter"
 import { clipNoteLength } from "./notes"
-import { captureNotesSnapshot } from "./snapshots"
+import { captureNotesSnapshot, objectIdentity } from "./snapshots"
 
 export type TransformSpec =
     | { type: "transpose"; semitones: number }
@@ -340,6 +340,7 @@ export function registerTransformNotesTool(server: McpServer, deps: ServerDeps):
                     tool: "transform_notes",
                     select,
                     oldNotes: existing,
+                    targetIdentity: objectIdentity(clip),
                 })
 
                 deps.context.withinTransaction(() => {
