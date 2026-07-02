@@ -252,6 +252,16 @@ sequenceDiagram
 
 SDK v1.0.0-beta.0 には undo / redo を実行する API が無い（`ExtensionContext` はトランザクションの undoable 性を記述するのみ）。このため `set_*` / `write_notes` は適用直前に旧値を `environment.storageDirectory/snapshots/<id>.json` へスナップショットし、応答に `snapshotId` を返す。`restore_snapshot` は `select` を再解決して旧プロパティ値 / 旧 notes を書き戻す。復元は best-effort であり、対象が削除・移動されている場合や select が異なる件数にマッチする場合は部分的・不可となる。構造操作（create / delete / duplicate）や `move_clip` / `trim_clip` の非可逆属性はこの機構の対象外。保持は最新 `MAX_SNAPSHOTS`(100) 件でローテーションする。upstream（Ableton Extensions SDK）への undo / redo API 追加要望は本機構の前提であり、追加され次第この代替を置き換える。
 
+## upstream（Ableton Extensions SDK）への要望
+
+SDK v1.0.0-beta.0 に不足しており、本リポジトリが回避策・scope 縮小で代替している API の一覧。追加され次第、対応する代替を置き換える。
+
+- **undo / redo API**: 上の「巻き戻し（スナップショット）」を参照。スナップショット機構はこの欠如の代替である。
+- **MIDI トラックの render / freeze / resample API**: `llm/midi-audition.md` の「真の解決（upstream）」を参照。手動 resample 前提の置き換え。
+- **トラック生成の挿入位置引数**: `Song.createMidiTrack()` / `Song.createAudioTrack()` は挿入位置（index）を受け取らず、生成位置は「最後に選択されたトラックの直後（未選択なら末尾）」に固定される。`create_track` はこの制約により挿入位置指定を提供できない（#14 は挿入位置なしへ scope 縮小して実装）。
+- **選択状態（selection）の読み取り・設定 API**: トラックの生成位置が選択状態に依存する一方、SDK から選択トラックを読むことも設定することもできないため、生成位置を制御も予測もできない。
+- **トラック移動（並べ替え）API**: 生成後に意図した位置へ移動する代替も、トラックの並べ替え API が無いため取れない。挿入位置引数・選択状態 API のいずれかがあれば `create_track` の位置指定は実現できる。
+
 ## データ所有
 
 ```mermaid
