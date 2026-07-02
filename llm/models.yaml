@@ -122,7 +122,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.7"
+            value: "2.17.8"
             note: "バージョンの正本は VERSION。build.ts が manifest.json / package.json と一致を検証し、__LIVE_CONNECTOR_VERSION__ としてバンドルへ注入する。"
           - name: "entry"
             type: "string"
@@ -139,7 +139,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "2.17.7"
+            value: "2.17.8"
 
     - name: "Env"
       kind: "configuration"
@@ -212,7 +212,7 @@ models:
           - name: "version"
             type: "string"
             required: true
-            value: "2.17.7"
+            value: "2.17.8"
           - name: "description"
             type: "string"
             required: true
@@ -863,12 +863,12 @@ mcp_tools:
 
     - name: "batch"
       source: "apps/extension/src/tools/batch.ts"
-      note: "set_* / write_notes ステップを 1 回で実行し undo 履歴上 1 ステップにまとめる。全ステップを適用前に解決・検証（all-or-nothing）。SDK のトランザクションコールバックが同期必須のため、後続ステップは同一 batch 内の先行ステップ生成物を参照不可、構造操作は対象外。"
+      note: "set_* / write_notes ステップを 1 回で実行し undo 履歴上 1 ステップにまとめる。入力検証は単体ツールと同一の zod スキーマ（SET_TOOL_SET_SCHEMAS / noteSchema / planNoteWrite）。解決・検証段階の失敗では何も適用しない。適用段階の失敗では SDK トランザクションがロールバックしないため適用済みステップが残り、応答で識別し書き込み履歴にも記録する。同一クリップへの複数 write_notes ステップは適用時に逐次再解決され先行結果を保持する。SDK のトランザクションコールバックが同期必須のため、後続ステップは同一 batch 内の先行ステップ生成物を参照不可、構造操作は対象外。"
       input:
           steps:
               type: "Step[]（discriminated union on tool）"
               required: true
-              note: "set_song{set} / set_track|set_clip|set_scene|set_cue_point|set_device_parameter{select,set} / write_notes{select,notes,mode,range?,allowOutOfRange?}"
+              note: "set_song{set} / set_track|set_clip|set_scene|set_cue_point|set_device_parameter{select,set} / write_notes{select,notes,mode,range?,allowOutOfRange?}。set の per-property 検証と write_notes の検証は単体ツールと同一。"
           preview:
               type: "boolean"
               required: false
@@ -881,10 +881,13 @@ mcp_tools:
               type: "TextContent[]"
               text_json_shape:
                   status: "\"preview\" | \"confirm_required\" | \"failed\" | \"ok\""
+                  phase: "\"resolve\" | \"apply\"（failed のみ。resolve=未適用、apply=部分適用の可能性）"
                   stepCount: "number（preview）"
-                  appliedSteps: "number（ok）| []（failed）"
+                  appliedSteps: "number（ok）| []（failed/resolve）| {index,tool}[]（failed/apply。適用済みで Set に残る）"
+                  failedSteps: "{index,tool,reason}[]（failed/apply）"
+                  unappliedSteps: "{index,tool}[]（failed/apply。同期失敗以降の未開始ステップ）"
                   totalTargets: "number"
-                  failedStep: "number（failed）"
+                  failedStep: "number（failed/resolve）"
                   steps: "step summary[]"
 
     - name: "snapshot_tools"
@@ -1991,7 +1994,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-2.17.7.ablx"
+        output_path: "apps/extension/dist/live-connector-2.17.8.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"

@@ -11,6 +11,33 @@ const CONFIRM_THRESHOLD = 20
 
 const SONG_SELECT = "MATCH (s:Song) RETURN s"
 
+/**
+ * set_* ツールの per-property zod スキーマの正本。
+ * batch のステップ検証も同じスキーマを使い、単体ツールとの検証等価性を保つ。
+ */
+export const SET_TOOL_SET_SCHEMAS = {
+    set_song: z.object({ tempo: z.number().positive().optional() }),
+    set_track: z.object({
+        name: z.string().optional(),
+        arm: z.boolean().optional(),
+        mute: z.boolean().optional(),
+        solo: z.boolean().optional(),
+    }),
+    set_clip: z.object({
+        name: z.string().optional(),
+        color: z.number().optional(),
+        muted: z.boolean().optional(),
+        looping: z.boolean().optional(),
+        warping: z.boolean().optional(),
+        warpMode: z
+            .enum(["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"])
+            .optional(),
+    }),
+    set_scene: z.object({ name: z.string().optional() }),
+    set_cue_point: z.object({ name: z.string().optional() }),
+    set_device_parameter: z.object({ value: z.number() }),
+} as const
+
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
 type SetParams = {
@@ -125,7 +152,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
             title: "Song プロパティ書き込み",
             description: "Song のプロパティ（tempo）を書き込む。",
             inputSchema: {
-                set: z.object({ tempo: z.number().positive().optional() }),
+                set: SET_TOOL_SET_SCHEMAS.set_song,
                 ...previewShape,
             },
         },
@@ -146,12 +173,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
                     .describe(
                         selectDescription("Track", 'MATCH (t:Track {name:"Drums"}) RETURN t'),
                     ),
-                set: z.object({
-                    name: z.string().optional(),
-                    arm: z.boolean().optional(),
-                    mute: z.boolean().optional(),
-                    solo: z.boolean().optional(),
-                }),
+                set: SET_TOOL_SET_SCHEMAS.set_track,
                 ...previewShape,
             },
         },
@@ -176,16 +198,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
                     .string()
                     .min(1)
                     .describe(selectDescription("Clip", 'MATCH (c:Clip {name:"Loop"}) RETURN c')),
-                set: z.object({
-                    name: z.string().optional(),
-                    color: z.number().optional(),
-                    muted: z.boolean().optional(),
-                    looping: z.boolean().optional(),
-                    warping: z.boolean().optional(),
-                    warpMode: z
-                        .enum(["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"])
-                        .optional(),
-                }),
+                set: SET_TOOL_SET_SCHEMAS.set_clip,
                 ...previewShape,
             },
         },
@@ -204,7 +217,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
                     .string()
                     .min(1)
                     .describe(selectDescription("Scene", "MATCH (s:Scene {index:0}) RETURN s")),
-                set: z.object({ name: z.string().optional() }),
+                set: SET_TOOL_SET_SCHEMAS.set_scene,
                 ...previewShape,
             },
         },
@@ -231,7 +244,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
                     .describe(
                         selectDescription("CuePoint", 'MATCH (c:CuePoint {name:"Verse"}) RETURN c'),
                     ),
-                set: z.object({ name: z.string().optional() }),
+                set: SET_TOOL_SET_SCHEMAS.set_cue_point,
                 ...previewShape,
             },
         },
@@ -260,7 +273,7 @@ export function registerWriteTools(server: McpServer, deps: ServerDeps): void {
                             'MATCH (:Track {name:"Lead"})-[:HAS_DEVICE]->(:Device)-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"}) RETURN p',
                         ),
                     ),
-                set: z.object({ value: z.number() }),
+                set: SET_TOOL_SET_SCHEMAS.set_device_parameter,
                 ...previewShape,
             },
         },

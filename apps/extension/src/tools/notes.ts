@@ -108,36 +108,37 @@ type WriteNotesParams = {
     preview: boolean | undefined
 }
 
-type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
-
-function textResult(payload: unknown, isError = false): ToolResult {
-    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError }
+export type NoteWriteParams = {
+    tool_name: string
+    notes: NoteInput[]
+    mode: "replace" | "merge" | "clear_range"
+    range: { start: number; end: number } | undefined
+    allowOutOfRange: boolean | undefined
 }
 
-async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promise<ToolResult> {
+export type NoteWritePlan = {
+    summary: Record<string, unknown>
+    /** 適用時点の clip.notes から変換後ノート列を計算する（batch の逐次再解決に使う）。 */
+    computeNextNotes: () => NoteDescription[]
+}
+
+/**
+ * write_notes の検証と変換計画。単体ツールと batch ステップの両方がこれを通ることで
+ * 入力検証を等価に保つ。summary の件数は計画時点の clip.notes に基づく。
+ */
+export function planNoteWrite(
+    clip: MidiClip<TargetApiVersion>,
+    params: NoteWriteParams,
+): NoteWritePlan {
     // notes 省略（既定 []）+ mode 省略（既定 replace）の呼び出しが全ノート無言消去にならないようにする。
     if (params.mode !== "clear_range" && params.notes.length === 0) {
-        throw new BadRequestError(`${params.mode} mode requires a non-empty notes array`, {
-            hint: 'Pass notes like [{pitch:60, startTime:0, duration:1, velocity:100}]. To intentionally remove notes, use mode:"clear_range" with range:{start:0, end:<clipLength>}.',
-        })
-    }
-    const adapter = new LomGraphAdapter(deps.context)
-    const nodes = await selectNodes(parseQuery(params.select), adapter)
-    if (nodes.length !== 1) {
         throw new BadRequestError(
-            `write_notes requires the selection to match exactly one MidiClip, but matched ${nodes.length}`,
+            `${params.tool_name}: ${params.mode} mode requires a non-empty notes array`,
             {
-                hint: 'Change select so it returns exactly one MidiClip node, e.g. MATCH (c:MidiClip {name:"Bass"}) RETURN c.',
+                hint: 'Pass notes like [{pitch:60, startTime:0, duration:1, velocity:100}]. To intentionally remove notes, use mode:"clear_range" with range:{start:0, end:<clipLength>}.',
             },
         )
     }
-    const node = nodes[0]
-    if (node === undefined || node.type !== "object" || !(node.value instanceof MidiClip)) {
-        throw new BadRequestError("select must return a MidiClip", {
-            hint: "Use a select query that returns a MidiClip node.",
-        })
-    }
-    const clip = node.value
     const clip_length = clipNoteLength(clip)
     const incoming = params.notes.map(toNoteDescription)
 
@@ -164,7 +165,6 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
                       input.startTime + input.duration > clip_length,
               ).length
 
-    let next_notes: NoteDescription[]
     const summary: Record<string, unknown> = {
         mode: params.mode,
         clipLength: clip_length,
@@ -173,46 +173,85 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
     }
 
     if (params.mode === "replace") {
-        next_notes = incoming
-        summary.noteCount = next_notes.length
-    } else if (params.mode === "merge") {
+        summary.noteCount = incoming.length
+        return { summary, computeNextNotes: () => incoming }
+    }
+    if (params.mode === "merge") {
         const existing = clip.notes
-        next_notes = mergeNotes(existing, incoming)
         summary.added = incoming.length
         summary.previous = existing.length
-        summary.noteCount = next_notes.length
-    } else {
-        if (params.range === undefined) {
-            throw new BadRequestError("clear_range mode requires a range {start, end}", {
-                hint: "Pass range as clip-relative beats, e.g. range:{start:0, end:4}.",
-            })
-        }
-        if (params.range.end <= params.range.start) {
-            throw new BadRequestError(
-                `range.end (${params.range.end}) must be greater than range.start (${params.range.start})`,
-                {
-                    hint: "range is [start, end) in clip-relative beats and must satisfy end > start, e.g. range:{start:0, end:4}.",
-                },
-            )
-        }
-        if (params.range.start >= clip_length) {
-            throw new BadRequestError(
-                `range [${params.range.start}, ${params.range.end}) is entirely outside the clip's relative range [0, ${clip_length})`,
-                {
-                    hint: `range uses CLIP-RELATIVE beats in [0, clipLength=${clip_length}); Clip.startTime/endTime are ARRANGEMENT-ABSOLUTE beats and belong to a different coordinate system. Recompute the range relative to the clip start.`,
-                },
-            )
-        }
-        const existing = clip.notes
-        const cleared = clearNotesInRange(existing, params.range.start, params.range.end)
-        next_notes = cleared.kept
-        summary.removed = cleared.removed
-        summary.range = params.range
-        summary.noteCount = next_notes.length
+        summary.noteCount = mergeNotes(existing, incoming).length
+        return { summary, computeNextNotes: () => mergeNotes(clip.notes, incoming) }
     }
+    const range = params.range
+    if (range === undefined) {
+        throw new BadRequestError(
+            `${params.tool_name}: clear_range mode requires a range {start, end}`,
+            {
+                hint: "Pass range as clip-relative beats, e.g. range:{start:0, end:4}.",
+            },
+        )
+    }
+    if (range.end <= range.start) {
+        throw new BadRequestError(
+            `range.end (${range.end}) must be greater than range.start (${range.start})`,
+            {
+                hint: "range is [start, end) in clip-relative beats and must satisfy end > start, e.g. range:{start:0, end:4}.",
+            },
+        )
+    }
+    if (range.start >= clip_length) {
+        throw new BadRequestError(
+            `range [${range.start}, ${range.end}) is entirely outside the clip's relative range [0, ${clip_length})`,
+            {
+                hint: `range uses CLIP-RELATIVE beats in [0, clipLength=${clip_length}); Clip.startTime/endTime are ARRANGEMENT-ABSOLUTE beats and belong to a different coordinate system. Recompute the range relative to the clip start.`,
+            },
+        )
+    }
+    const cleared = clearNotesInRange(clip.notes, range.start, range.end)
+    summary.removed = cleared.removed
+    summary.range = range
+    summary.noteCount = cleared.kept.length
+    return {
+        summary,
+        computeNextNotes: () => clearNotesInRange(clip.notes, range.start, range.end).kept,
+    }
+}
+
+type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
+
+function textResult(payload: unknown, isError = false): ToolResult {
+    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError }
+}
+
+async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promise<ToolResult> {
+    const adapter = new LomGraphAdapter(deps.context)
+    const nodes = await selectNodes(parseQuery(params.select), adapter)
+    if (nodes.length !== 1) {
+        throw new BadRequestError(
+            `write_notes requires the selection to match exactly one MidiClip, but matched ${nodes.length}`,
+            {
+                hint: 'Change select so it returns exactly one MidiClip node, e.g. MATCH (c:MidiClip {name:"Bass"}) RETURN c.',
+            },
+        )
+    }
+    const node = nodes[0]
+    if (node === undefined || node.type !== "object" || !(node.value instanceof MidiClip)) {
+        throw new BadRequestError("select must return a MidiClip", {
+            hint: "Use a select query that returns a MidiClip node.",
+        })
+    }
+    const clip = node.value
+    const plan = planNoteWrite(clip, {
+        tool_name: "write_notes",
+        notes: params.notes,
+        mode: params.mode,
+        range: params.range,
+        allowOutOfRange: params.allowOutOfRange,
+    })
 
     if (params.preview === true) {
-        return textResult({ status: "preview", ...summary })
+        return textResult({ status: "preview", ...plan.summary })
     }
 
     const snapshotId = await captureNotesSnapshot(deps, {
@@ -222,10 +261,10 @@ async function runWriteNotes(deps: ServerDeps, params: WriteNotesParams): Promis
     })
 
     deps.context.withinTransaction(() => {
-        clip.notes = next_notes
+        clip.notes = plan.computeNextNotes()
     })
 
-    return textResult({ status: "ok", ...summary, snapshotId })
+    return textResult({ status: "ok", ...plan.summary, snapshotId })
 }
 
 /** `write_notes` ツール: select で選んだ単一 MidiClip の notes を replace / merge / clear_range する。 */
