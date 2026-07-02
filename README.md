@@ -11,12 +11,12 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 ## 必要なもの
 
 - Ableton Live（Extensions 対応の Beta ビルド）
-- [live-connector v2.17.1](https://github.com/philtzjp/live-connector/releases/tag/v2.17.1) の `.ablx`
+- [live-connector v2.17.17](https://github.com/philtzjp/live-connector/releases/tag/v2.17.17) の `.ablx`
 - Claude Code などの HTTP MCP クライアント
 
 ## インストール
 
-1. [`live-connector-2.17.1.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.17.1/live-connector-2.17.1.ablx) をダウンロードします。
+1. [`live-connector-2.17.17.ablx`](https://github.com/philtzjp/live-connector/releases/download/v2.17.17/live-connector-2.17.17.ablx) をダウンロードします。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -31,7 +31,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"2.17.1","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
+{"status":"pass","version":"2.17.17","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
 ```
 
 ## Claude Code で使う
