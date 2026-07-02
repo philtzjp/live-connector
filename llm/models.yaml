@@ -2481,3 +2481,105 @@ decisions:
             - "互換性: 集約は既存 10 ツールの削除または並行残置を要し、既存クライアント（書き込み履歴・スナップショット・batch 対象外リストの参照を含む）への破壊的変更となる。現時点で得られる便益が移行コストを下回る。"
             - "閾値との関係: 現在 39 ツールで設計閾値 40 以下。今後のツール追加で 40 を継続的に超える場合は、新規追加を集約形式で設計する（既存の個別ツールは残置）方針で再検討する。"
         revisit_when: "登録ツール数が 45 を超えたとき、または MCP クライアント側でツール一覧のコンテキスト消費が実測で問題化したとき。"
+    tool_organization_132:
+        date: "2026-07-02"
+        issue: "#132"
+        decision: "次メジャーバージョンで候補 A（プロパティ書き込み統合、6 → 1、削減 5 件）と候補 D（ノート編集統合、2 → 1、削減 1 件）を同梱採用し、登録ツール数を 39 → 33 にする。候補 B・C は不採用。候補 E は運用ツール現状維持。"
+        context: "v2.17.17 時点の登録 MCP ツールは 39 件（`apps/extension/src/server/annotations.ts` の `TOOL_ANNOTATIONS` が正本、`annotations.test.ts` が網羅一致を固定）で設計閾値 40 に到達している。読み取りは `schema` / `query` / `get_overview` に集約済みだが、書き込みは同型の `select` + 操作パターンがツール名ごとに分裂している。`batch` は `set_*` / `write_notes` のみを 1 undo に束ね、構造操作は対象外（#48 / #50 / #104）。構造操作集約（候補 B）は `structure_tool_aggregation_104` で見送り済み。"
+        rationale:
+            - "候補 A の 6 ツール（set_song / set_track / set_clip / set_scene / set_cue_point / set_device_parameter）は `apps/extension/src/tools/write.ts` の `runSetTool` を共有し、差分は `requiredLabel`・`SET_TOOL_SET_SCHEMAS` のキー・`createHint` のみ。annotations は全件 IDEMPOTENT_WRITE（readOnlyHint:false / destructiveHint:false / idempotentHint:true）で一致しており、統合しても annotations 区分は維持できる。"
+            - "候補 A の union スキーマ分が単一ツールの inputSchema に移るため、tools/list のコンテキスト削減はツール数比ほど大きくない。削減の主目的はエージェントのツール選択コスト（発見性）の低減である。"
+            - "候補 D の 2 ツール（write_notes / transform_notes）はいずれも DESTRUCTIVE で annotations 区分が一致し、MidiClip 単一 select 契約を共有する。削減 1 件だが A と deprecation 告知コストを共有できるため同一メジャーに同梱する。"
+            - "候補 C の 4 ツールは annotations が CREATE_WRITE・DESTRUCTIVE・IDEMPOTENT_WRITE の 3 区分にまたがる。MCP annotations はツール単位のため統合すると destructive に寄せざるを得ず、設計原則 3（annotations の意味を保つ）と矛盾する（#104 rationale と同型の問題）。"
+            - "候補 B は 39 件で `structure_tool_aggregation_104` の revisit_when（45 件超）に未到達。代替案「新規追加のみ集約形式・既存は残置」は #104 decision に記録済みのため重複定義しない。"
+            - "batch の構造操作対応は `llm/ARCHITECTURE.md` 記載の同期 `withinTransaction` 制約（コールバック内で await 不可のため後続ステップが先行ステップの生成物を参照できない）が本質であり、候補 B の採否と独立の並行課題である。"
+        principles:
+            - "読み取りは query に寄せる: 新規 LOM 読み取りツールは追加しない。発見は `schema`、対象特定と射影は `query`、Set 全体のブートストラップは `get_overview` に限定する。"
+            - "書き込みは select で対象を query 的に指定し、操作種別はツールまたは引数で表す: 種別は zod の discriminated union または `operation` 引数で表現し、MCP クライアントが tools/list だけで正しい引数を組める粒度を維持する（#104 rationale）。"
+            - "annotations / confirm ガードはツール単位で意味を保つ: 集約ツールは destructiveHint / idempotentHint が種別で異なる場合、クライアントの自動承認判断が濁らない設計にする。"
+            - "batch はエージェントの手続き集約レイヤとして拡張する: 単体ツール削減の代替ではなく、確定した複数ステップを 1 undo に束ねる。構造操作の batch 対応は同期 withinTransaction 制約の解消またはワークアラウンドが前提であり、候補 B の採否と独立の並行課題である（`llm/ARCHITECTURE.md`）。"
+            - "互換性: 既存ツール名は deprecation 期間を設け、`WRITE_HISTORY_TOOLS`・スナップショット・`query_contract.select.tools`・`SERVER_INSTRUCTIONS` の一括更新が必要である。"
+        candidates:
+            A:
+                label: "プロパティ書き込み統合（set_properties 仮称）"
+                reduction: "5 件（set_song / set_track / set_clip / set_scene / set_cue_point / set_device_parameter の 6 件 → 1 件）"
+                zod_annotations: "6 件とも `runSetTool` と `SET_TOOL_SET_SCHEMAS` を共有し annotations は全件 IDEMPOTENT_WRITE で一致。統合後は discriminated union またはラベル推論付き `set` で per-label zod 検証を inputSchema 内に集約し、annotations は IDEMPOTENT_WRITE を維持する。set_song の固定 select は `target: song` 等で表現する。"
+                batch_history_snapshot: "`batchStepSchema`（`apps/extension/src/tools/batch.ts`）は `tool` ディスクリミネータの discriminated union で set_song 無 select バリアントを既に解決済み。統合時はステップ形式を `set_properties` に更新する。`WRITE_HISTORY_TOOLS`・`capturePropertiesSnapshot` の `tool` フィールド・`query_contract.select.tools` を更新する。既存 JSONL 履歴の旧ツール名は `get_write_history` がそのまま返す。"
+                breaking_change: "あり。旧 6 ツールは deprecation 期間中に並行残置し、次メジャーで削除する。"
+                verdict: "採用（次メジャー、D と同梱）"
+            B:
+                label: "構造操作集約（create_object / delete_object / duplicate_object 仮称）"
+                reduction: "7〜12 件（create / insert 6 + duplicate 3 + delete 6 の計 15 件を 3 件程度に集約）"
+                zod_annotations: "種別固有バリデーション（create_track の kind、create_clip の length / audioFilePath 相互排他、delete_session_clip の ClipSlot 制約等）は union スキーマで表現可能だが、create は非破壊・delete は confirm 必須と annotations / confirm ガードが種別で異なり、単一ツールでは表現が濁る（#104 rationale）。"
+                batch_history_snapshot: "構造操作は現状 batch 対象外。集約しても withinTransaction 制約（後続ステップが先行生成物を参照不可）は残る。履歴・スナップショットの `tool` フィールド更新が全構造ツール分必要になる。"
+                breaking_change: "あり。既存 15 件前後の削除または並行残置を要し、移行コストが大きい。"
+                verdict: "不採用（39 件で #104 の revisit_when 未到達。#104 decision および「新規追加のみ集約形式・既存残置」方針を参照）"
+            C:
+                label: "アレンジメントクリップ操作統合（arrange_clip 仮称）"
+                reduction: "3 件（create_arrangement_clip / delete_arrangement_clip / move_clip / trim_clip の 4 件 → 1 件）"
+                zod_annotations: "4 ツールの annotations は 3 区分: create_arrangement_clip = CREATE_WRITE（非破壊・非冪等）、delete_arrangement_clip = DESTRUCTIVE、move_clip / trim_clip = IDEMPOTENT_WRITE。MCP annotations はツール単位のため統合すると destructive に寄せざるを得ず、設計原則 3 と矛盾する。"
+                batch_history_snapshot: "batch ステップ・`WRITE_HISTORY_TOOLS`・スナップショット `tool` フィールド・`query_contract.select.tools` の 4 ツール分更新が必要。"
+                breaking_change: "あり。deprecation 期間と旧ツール並行残置を要する。"
+                verdict: "不採用（annotations 3 区分の統合不可。MCP 仕様で operation 単位 annotations が可能になるか、クライアント実測で annotations が自動承認に使われていないと確認できるまで見送り）"
+            D:
+                label: "ノート編集統合（edit_notes 仮称）"
+                reduction: "1 件（write_notes / transform_notes の 2 件 → 1 件）"
+                zod_annotations: "2 ツールとも DESTRUCTIVE で区分一致。MidiClip 単一 select 契約。統合後は `mode: replace | merge | clear_range | transform` で分岐し、transform 時のみ transform spec を要求。annotations は DESTRUCTIVE を維持する。"
+                batch_history_snapshot: "write_notes は現行 batch 対象。統合後は batch ステップ・`WRITE_HISTORY_TOOLS`・スナップショット・`query_contract.select.tools` を更新する。"
+                breaking_change: "あり。旧 2 ツールは deprecation 期間中に並行残置する。"
+                verdict: "採用（次メジャー、A と同梱）"
+            E:
+                label: "運用ツール整理"
+                reduction: "0〜1 件"
+                zod_annotations: "get_write_history / list_snapshots は JSONL・ファイルメタが対象で query 化不適。verify_device_catalog は instructions で通常ワークフロー外と明記済み。"
+                batch_history_snapshot: "get_write_history は JSONL 履歴の監査用途。list_snapshots はファイルメタ一覧。いずれも query 化の対象外。"
+                breaking_change: "なし（現状維持）。verify_device_catalog の tools/list 分離は将来検討。"
+                verdict: "現状維持（get_write_history / list_snapshots）。verify_device_catalog の分離は将来検討。"
+            F:
+                label: "目標ツール数（段階計画）"
+                reduction: "段階ごとの着地件数（下記 target_counts 参照）"
+                zod_annotations: "該当なし（集約候補ではなく計画指標）"
+                batch_history_snapshot: "該当なし"
+                breaking_change: "該当なし"
+                verdict: "計画指標として target_counts に記録。次バージョン採用は A + D（33 件）。Issue 本文の中期案（A + C + D = 30 件）は C 不採用のため見直し。"
+        adoption:
+            next_major: "候補 A（set_properties 仮称）と候補 D（edit_notes 仮称）を同一メジャーバージョンに同梱する。着地は 39 → 33 件（削減 6 件）。deprecation 告知コストを共有できるため同梱が有利である。"
+            not_adopted:
+                B: "39 件で `structure_tool_aggregation_104` の revisit_when（45 件超または tools/list コンテキスト消費の実測問題化）に未到達。方針は #104 decision を参照する。"
+                C: "annotations が CREATE_WRITE / DESTRUCTIVE / IDEMPOTENT_WRITE の 3 区分にまたがり、統合すると設計原則 3 と矛盾する（#104 rationale と同型）。MCP 仕様で operation 単位 annotations が可能になるか、クライアント実測で annotations が自動承認に使われていないと確認できるまで見送る。"
+                E_partial: "get_write_history / list_snapshots は現状維持。verify_device_catalog の分離のみ将来検討。"
+        target_counts:
+            current: 39
+            short_term_A_only: 34
+            short_term_A_plus_D: 33
+            deprecation_period: "41（一時的。旧 set_* 6 + write_notes / transform_notes の 8 件と新 set_properties / edit_notes の 2 件を並行残置）"
+            long_term_with_B: "22〜26（#104 revisit_when 到達時に B を再検討）"
+            design_threshold: 40
+        migration:
+            deprecation_period:
+                registered_tool_count: 41
+                composition: "旧 8 件（set_* 6 + write_notes / transform_notes）と新 2 件（set_properties / edit_notes）の並行残置により、設計閾値 40 を一時的に超える。"
+                handling: "deprecation 期間を限定する。`SERVER_INSTRUCTIONS` で新ツール優先・旧ツール deprecated を明示し、発見性への影響を抑える。恒久超過ではなく、旧ツール削除完了後に 33 件へ着地する。"
+            phases:
+                - "新ツール（set_properties / edit_notes）を追加し、旧ツールを deprecated として並行残置する（登録ツール数は一時的に 41 件となる）。"
+                - "deprecation 期間中は `SERVER_INSTRUCTIONS` と `query_contract.select.tools` を新ツール優先に更新し、旧ツールは互換用として残す。"
+                - "採用メジャーバージョンのその次のメジャーバージョンで旧ツールを削除し、33 件に着地する。"
+            instructions: "`apps/extension/src/server/mcp.ts` の `SERVER_INSTRUCTIONS` を新ツール名・推奨フロー（schema → query → preview → confirm → batch）に合わせて更新する。"
+            query_contract: "`packages/lom-schema/src/schema.ts` の `query_contract.select.tools` を新ツールに合わせて更新し、`select-contract.test.ts` で突合する。"
+        rename_checklist:
+            - "`TOOL_ANNOTATIONS`（`apps/extension/src/server/annotations.ts`）と網羅一致テスト `annotations.test.ts`"
+            - "`WRITE_HISTORY_TOOLS`（`apps/extension/src/tools/history.ts`）。既存 JSONL 履歴には旧ツール名が残るため `get_write_history` は旧名エントリをそのまま返す"
+            - "スナップショットの `tool` フィールド（`capturePropertiesSnapshot`）と `restore_snapshot` の互換"
+            - "`query_contract.select.tools`（`packages/lom-schema/src/schema.ts`）と突合テスト `select-contract.test.ts`"
+            - "`batchStepSchema`（`apps/extension/src/tools/batch.ts`）"
+            - "`SERVER_INSTRUCTIONS`（`apps/extension/src/server/mcp.ts`）"
+        follow_up_issues:
+            - title: "feat(extension): set_properties へのプロパティ書き込み統合"
+              description: "候補 A の実装。6 件の set_* を set_properties に統合し、deprecation 告知と rename_checklist 6 箇所の更新を行う。"
+            - title: "feat(extension): edit_notes へのノート編集統合"
+              description: "候補 D の実装。write_notes / transform_notes を edit_notes に統合し、A と同一メジャーで同梱する。"
+            - title: "chore(extension): deprecated ツールの削除"
+              description: "deprecation 期間終了後、set_* 6 件と write_notes / transform_notes を削除する。"
+            - title: "refactor(extension): batch の withinTransaction 制約解消の調査"
+              description: "構造操作の batch 対応に必要な SDK 制約（コールバック内 await 不可）のワークアラウンドまたは解消策を調査する。候補 B の採否と独立。"
+        revisit_when: "候補 B は `structure_tool_aggregation_104` の revisit_when（登録ツール数が 45 を超えたとき、または MCP クライアント側でツール一覧のコンテキスト消費が実測で問題化したとき）に従う。候補 C は MCP 仕様で operation 単位の annotations 表現が可能になったとき、またはクライアントが annotations を自動承認に使っていないと実測確認できたとき。"
