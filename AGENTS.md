@@ -30,7 +30,7 @@
 6. IF: サービスのバージョン変更が必要と判断された; THEN MUST: セマンティックバージョニングに基づいて `VERSION` を更新し、`llm/version/${version}.md` を作成する
 7. IF: アーキテクチャが変更された; THEN MUST: `./llm/ARCHITECTURE.md` の Mermaid ダイアグラムを更新する
 8. MUST: GitHub Issue 本体・コメント、PR 本文・コメントを書く・更新するとき、先頭行に書き手のエージェント署名を `✳︎ <会社名> <モデル名> <バージョン>` 形式で入れ、次に空行を1行挟んで本文を続ける; MUST: モデル名にバージョン番号が含まれる場合（例: `GPT-5.5`）は `<バージョン>` を省略する; MUST: 署名は U+2733 EIGHT SPOKED ASTERISK (`✳︎`) で始める; NEVER: 署名を本文の途中・末尾に置く、署名行と本文の間の空行を省略する、署名行に日時・ID・装飾などの追加情報を含める
-9. MUST: Issue 本体は `.github/ISSUE_TEMPLATE.md`、Issue コメントは `.github/ISSUE_COMMENT_TEMPLATE.md`、PR 本文は `.github/PULL_REQUEST_TEMPLATE.md`（GitHub が自動適用）のテンプレートに従う; MUST: 共通の骨格は署名・背景・作業範囲・受け入れ条件・備考とし、受け入れ条件には各条件が満たされたか（満たし方・検証）を記す; IF: Issue コメントが対応不可の記録; THEN MUST: 受け入れ条件に満たせない理由・制約を記し、Issue はクローズしない
+9. MUST: Issue 本体は `.github/ISSUE_TEMPLATE.md`、Issue コメントは `.github/ISSUE_COMMENT_TEMPLATE.md`、PR 本文は `.github/PULL_REQUEST_TEMPLATE.md`（GitHub が自動適用）のテンプレートに従う; MUST: これら Issue / PR の共通骨格は署名・背景・作業範囲・受け入れ条件・備考とし、受け入れ条件は task list（`- [ ]` チェックボックス）で記述して各条件が満たされたか（満たし方・検証）を記す; MUST: GitHub リリースノートは `.github/RELEASE_TEMPLATE.md`（署名なし・変更内容・制約・インストール・更新手順・備考）に従う; IF: Issue コメントが対応不可の記録、またはレビュー・マージの保留記録; THEN MUST: 満たせない理由・制約や保留理由・再開条件を記し、Issue はクローズしない
 
 ## 署名早見表
 | エージェント | 署名 |
