@@ -168,6 +168,48 @@ describe("parseStatement", () => {
         })
     })
 
+    describe("CALL", () => {
+        it("parses a zero-argument procedure call", () => {
+            expect(parseStatement("CALL transport.play()")).toEqual({
+                kind: "call",
+                procedure: "transport.play",
+                args: [],
+            })
+        })
+
+        it("parses a numeric argument", () => {
+            expect(parseStatement("CALL transport.seek(32)")).toEqual({
+                kind: "call",
+                procedure: "transport.seek",
+                args: [32],
+            })
+        })
+
+        it("parses a string argument", () => {
+            expect(parseStatement('CALL render.cancel("render-abc")')).toEqual({
+                kind: "call",
+                procedure: "render.cancel",
+                args: ["render-abc"],
+            })
+        })
+
+        it("rejects a bare identifier argument (no variable references)", () => {
+            expect(() => parseStatement("CALL render.cancel(job)")).toThrow(
+                /Expected a scalar value/,
+            )
+        })
+
+        it("rejects multiple statements chained after CALL", () => {
+            expect(() => parseStatement("CALL transport.stop() CALL transport.play()")).toThrow(
+                /single CALL with literal arguments/,
+            )
+        })
+
+        it("rejects a CALL without parentheses", () => {
+            expect(() => parseStatement("CALL transport.stop")).toThrow(/Expected "\("/)
+        })
+    })
+
     describe("errors", () => {
         it("rejects SET assignments targeting multiple variables", () => {
             expect(() =>
