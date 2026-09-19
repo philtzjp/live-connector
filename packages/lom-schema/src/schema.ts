@@ -33,11 +33,12 @@ export const startable_labels: string[] = [
     "CuePoint",
     "WriteEvent",
     "RenderJob",
+    "Transport",
 ]
 
 export const query_contract: QueryContract = {
     grammar:
-        "MATCH <pattern> [WHERE <expr>] RETURN [DISTINCT] <items> [ORDER BY ...] [SKIP n] [LIMIT n]; MATCH ... SET n.prop = <value> [, ...]; CREATE (n:Label {prop: value}); MATCH ... CREATE (a)-[:REL]->(n:Label {...}); MATCH ... [DETACH] DELETE n; MATCH ... COPY n",
+        "MATCH <pattern> [WHERE <expr>] RETURN [DISTINCT] <items> [ORDER BY ...] [SKIP n] [LIMIT n]; MATCH ... SET n.prop = <value> [, ...]; CREATE (n:Label {prop: value}); MATCH ... CREATE (a)-[:REL]->(n:Label {...}); MATCH ... [DETACH] DELETE n; MATCH ... COPY n; CALL <allowed-procedure>(<literal>, ...)",
     start_labels: startable_labels,
     time_coordinates: {
         absolute:
@@ -57,6 +58,7 @@ export const query_contract: QueryContract = {
             "... ORDER BY ... SKIP n LIMIT n",
             "MATCH (e:WriteEvent) RETURN e",
             "MATCH (j:RenderJob) RETURN j",
+            "MATCH (t:Transport) RETURN t",
         ],
     },
     write: {
@@ -147,9 +149,53 @@ export const query_contract: QueryContract = {
             no_match: "0 件マッチはエラーではなく no_match",
         },
     },
+    procedure: {
+        tool: "do",
+        grammar:
+            "CALL <procedure>(<literal> [, ...])。手続き名は許可リストのみ、引数は文字列・数値・真偽値・null のリテラルに限る。動的関数名・変数参照・複数文は受理しない。例: CALL transport.seek(32)",
+        allowed: [
+            {
+                name: "transport.play",
+                args: "",
+                effect: "runtime",
+                undoable: "none",
+                requiresConfirm: true,
+            },
+            {
+                name: "transport.stop",
+                args: "",
+                effect: "runtime",
+                undoable: "none",
+                requiresConfirm: true,
+            },
+            {
+                name: "transport.seek",
+                args: "beats:number",
+                effect: "runtime",
+                undoable: "none",
+                requiresConfirm: true,
+            },
+            {
+                name: "render.cancel",
+                args: "jobId:string",
+                effect: "runtime",
+                undoable: "none",
+                requiresConfirm: true,
+            },
+        ],
+        guards: {
+            literals_only: "引数はリテラルのみ。式・変数・動的関数名は拒否する。",
+            preview: "preview:true は OSC 送信を含め副作用ゼロ。計画と事前検査のみを返す。",
+            confirm: "全手続きで confirm:true 必須。confirm なしは confirm_required を返す。",
+            lock: "Main 録音中は書き込み・別 render・transport.play/seek を拒否し、cancel と読取は許可する。",
+        },
+    },
     virtual_labels: {
         WriteEvent: "undo ログ（id, time, kind, statement, undoable, status）— 書き込み不可",
-        RenderJob: "render 非同期ジョブ（id, status, filePath?, error?）— 書き込み不可",
+        RenderJob:
+            "render ジョブ（id, status, source, method, phase, progress, audioStatus, cleanupStatus, filePath?, error?）— 読み取り専用",
+        Transport:
+            "Transport 状態（isPlaying, currentSongTime, tempo, recordMode, loop, loopStart, loopLength, punchIn, punchOut, observedAt）— 読み取り専用。切断後の古い値は返さない",
     },
 }
 
@@ -344,4 +390,9 @@ export const EXAMPLE_QUERIES: string[] = [
     "MATCH (s:Scene {index:0}) COPY s",
     "MATCH (e:WriteEvent) RETURN e.id, e.statement, e.undoable, e.status",
     "MATCH (j:RenderJob) RETURN j.id, j.status, j.filePath",
+    "MATCH (t:Transport) RETURN t.isPlaying, t.currentSongTime, t.tempo",
+    "CALL transport.seek(32)",
+    "CALL transport.play()",
+    "CALL transport.stop()",
+    'CALL render.cancel("render-abc")',
 ]
