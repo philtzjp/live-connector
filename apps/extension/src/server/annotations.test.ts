@@ -31,10 +31,12 @@ describe("withToolAnnotations", () => {
             (server.tools.get("undo")?.config.annotations as { idempotentHint?: boolean })
                 ?.idempotentHint,
         ).toBe(false)
-        expect(
-            (server.tools.get("render")?.config.annotations as { destructiveHint?: boolean })
-                ?.destructiveHint,
-        ).toBe(false)
+        // render は Main 実時間録音で一時トラック・Transport を変更するため保守的に destructive とする。
+        expect(server.tools.get("render")?.config.annotations).toEqual({
+            readOnlyHint: false,
+            destructiveHint: true,
+            idempotentHint: false,
+        })
     })
 
     it("covers every registered tool with an annotation", async () => {

@@ -38,6 +38,7 @@ const KEYWORDS = new Set([
     "DELETE",
     "DETACH",
     "COPY",
+    "CALL",
 ])
 
 const PUNCT_TWO = new Set(["->", "..", ">=", "<=", "<>"])

@@ -17,6 +17,17 @@ source_files:
         - "apps/extension/src/server/http.ts"
         - "apps/extension/src/server/mcp.ts"
         - "apps/extension/src/server/annotations.ts"
+        - "apps/extension/src/runtime/runtime.ts"
+        - "apps/extension/src/runtime/capabilities.ts"
+        - "apps/extension/src/runtime/locks.ts"
+        - "apps/extension/src/runtime/resolver.ts"
+        - "apps/extension/src/runtime/procedures.ts"
+        - "apps/extension/src/osc/codec.ts"
+        - "apps/extension/src/osc/client.ts"
+        - "apps/extension/src/osc/protocol.ts"
+        - "apps/extension/src/osc/transport.ts"
+        - "apps/extension/src/osc/routing.ts"
+        - "apps/extension/src/types/hybrid.ts"
     tools:
         - "apps/extension/src/tools/common.ts"
         - "apps/extension/src/tools/meta.ts"
@@ -26,6 +37,7 @@ source_files:
         - "apps/extension/src/tools/do/create.ts"
         - "apps/extension/src/tools/do/delete.ts"
         - "apps/extension/src/tools/do/copy.ts"
+        - "apps/extension/src/tools/do/call.ts"
         - "apps/extension/src/tools/do/schemas.ts"
         - "apps/extension/src/tools/do/write-support.ts"
         - "apps/extension/src/tools/do/arrangement-edit.ts"
@@ -46,6 +58,11 @@ source_files:
         - "apps/extension/src/undo/blueprint.ts"
     render:
         - "apps/extension/src/render/jobs.ts"
+        - "apps/extension/src/render/plan.ts"
+        - "apps/extension/src/render/resampling.ts"
+        - "apps/extension/src/render/capture-state.ts"
+        - "apps/extension/src/render/artifacts.ts"
+        - "apps/extension/src/render/journal.ts"
     lom_adapter:
         - "apps/extension/src/lom/adapter.ts"
         - "apps/extension/src/lom/create-adapter.ts"
@@ -159,7 +176,7 @@ models:
           - name: "value"
             type: "semver"
             required: true
-            value: "3.0.0"
+            value: "3.1.0"
 
     - name: "Env"
       kind: "configuration"
@@ -175,6 +192,48 @@ models:
             type: "number"
             required: false
             default: 7799
+          - name: "LIVE_CONNECTOR_OSC_ENABLED"
+            type: "boolean"
+            required: false
+            default: false
+            note: "AbletonOSC 連携。無効でも従来の SDK 機能は動く。"
+          - name: "LIVE_CONNECTOR_OSC_HOST"
+            type: "string"
+            required: false
+            default: "127.0.0.1"
+            note: "loopback host のみ許可する。"
+          - name: "LIVE_CONNECTOR_OSC_SEND_PORT"
+            type: "number"
+            required: false
+            default: 11000
+          - name: "LIVE_CONNECTOR_OSC_REPLY_PORT"
+            type: "number"
+            required: false
+            default: 11001
+          - name: "LIVE_CONNECTOR_OSC_TIMEOUT_MS"
+            type: "number"
+            required: false
+            default: 1500
+          - name: "LIVE_CONNECTOR_CAPTURE_VALIDATION_LEVEL"
+            type: "\"unverified\" | \"integration-tested\""
+            required: false
+            default: "unverified"
+          - name: "LIVE_CONNECTOR_CAPTURE_VALIDATION_ID"
+            type: "string"
+            required: false
+            note: "検証済み Live/SDK/OSC revision の識別子。任意。"
+          - name: "LIVE_CONNECTOR_PLAN_TTL_MS"
+            type: "number"
+            required: false
+            default: 60000
+          - name: "LIVE_CONNECTOR_MAX_CAPTURE_BEATS"
+            type: "number"
+            required: false
+            default: 2048
+          - name: "LIVE_CONNECTOR_MAX_ARTIFACT_BYTES"
+            type: "number"
+            required: false
+            default: 536870912
 
     - name: "ServerDeps"
       kind: "dependency_container"
@@ -187,6 +246,10 @@ models:
           - name: "log"
             type: "Logger"
             required: true
+          - name: "runtime"
+            type: "HybridRuntime"
+            required: true
+            note: "activation 単位の singleton。OSC・lock・resolver を共有する。"
 
     - name: "ServerInfo"
       kind: "runtime_output"
@@ -757,7 +820,7 @@ mcp_tools:
     - name: "McpServerMetadata"
       kind: "mcp_metadata"
       source: "apps/extension/src/server/mcp.ts"
-      note: "initialize 応答の instructions（推奨手順 meta→do read→do write→render→undo、時刻座標・ガードレール）と、withToolAnnotations facade による tool annotations。区分: meta=readOnlyHint / do=destructiveHint（読み書き統合）/ undo=destructiveHint+idempotentHint:false / render=非破壊レンダリング。正本は apps/extension/src/server/annotations.ts の TOOL_ANNOTATIONS（4 件）、網羅一致は annotations.test.ts で固定。"
+      note: "initialize 応答の instructions（推奨手順 meta→do read→do write→do call→render→undo、時刻座標・render の 2 モード・Main 録音中の排他・ガードレール）と、withToolAnnotations facade による tool annotations。区分: meta=readOnlyHint / do=destructiveHint（読み書き統合）/ undo=destructiveHint+idempotentHint:false / render=readOnlyHint:false+destructiveHint:true+idempotentHint:false（Main 実時間録音が一時トラックと Transport を変更するため保守的）。正本は apps/extension/src/server/annotations.ts の TOOL_ANNOTATIONS（4 件）、網羅一致は annotations.test.ts で固定。"
       decisions:
           mixer_write: "volume/panning/send は HAS_MIXER→Parameter 経由で do SET Parameter.value に統一する。"
           mcp_prompts: "本 release では MCP prompts を採用しない。定型ワークフローの配布は instructions で代替する。"
@@ -786,11 +849,14 @@ mcp_tools:
               text_json_shape:
                   service: "{ name, version }"
                   schema: "LomSchema"
-                  query_contract: "QueryContract（読み書き文法）"
+                  query_contract: "QueryContract（読み書き文法・CALL 手続き）"
                   examples: "string[]"
+                  capabilities: "RenderCapabilities（audioTrackPreFx / mainOutput）"
+                  runtime: "RuntimeCapabilities（osc.connected, capturePairing, realtimeRenderLimit, maxCaptureBeats, maxArtifactBytes, validationLevel, validationId?）"
                   virtual_labels:
                       WriteEvent: "undo ログ照会クエリ"
                       RenderJob: "render ジョブ照会クエリ"
+                      Transport: "Transport 状態照会クエリ（OSC 未接続は 0 行）"
                   overview: "tempo / scale / track 概要 / cuePoints / structureDigest / identity"
 
     - name: "do"
@@ -802,6 +868,7 @@ mcp_tools:
           write CREATE: CREATE (t:MidiTrack|AudioTrack {name?}) / CREATE (s:Scene {index?, name?}) / CREATE (c:CuePoint {time, name?}) / MATCH ... CREATE (a)-[:REL]->(n:Label {...})。
           write DELETE: MATCH ... [DETACH] DELETE n。
           write COPY: MATCH ... COPY n（Track / Scene / Device）。
+          call: CALL transport.play() | transport.stop() | transport.seek(<beats>) | render.cancel(<jobId>)。許可手続きとリテラル引数のみ。preview:true は OSC 送信も含め副作用ゼロ、confirm:true 必須。effect:"runtime" / undoable:"none" で WriteEvent には記録しない。Main 録音中は書き込み・undo・別 render と transport.play/seek を拒否し、render.cancel と読み取りは許可する。
           preview:true でドライラン。undoable partial/none は confirm:true 必須。
           応答: status ok|no_match|preview|confirm_required。書き込み ok は writeId + undoable + changed|created|deleted|copied（差分のみ）。
           WRITABLE_BY_LABEL: Song[tempo]; Track/MidiTrack/AudioTrack/ReturnTrack/MainTrack[name,arm,mute,solo]; Clip[name,color,muted,looping,startTime,duration,startMarker,endMarker]; MidiClip[+notes]; AudioClip[+warping,warpMode]; Scene[name]; CuePoint[name]; Parameter[value]; Simpler[sampleFile]; Note[pitch,startTime,duration,velocity,muted,probability,releaseVelocity,velocityDeviation]。
@@ -811,15 +878,15 @@ mcp_tools:
               type: "string"
               required: true
               min_length: 1
-              note: "実行する Cypher 文（読み取りまたは書き込み）"
+              note: "実行する Cypher 文（読み取り・書き込み・CALL）"
           preview:
               type: "boolean"
               required: false
-              note: "書き込みのドライラン"
+              note: "書き込み・CALL のドライラン（CALL preview は副作用ゼロ）"
           confirm:
               type: "boolean"
               required: false
-              note: "undoable partial/none の書き込み確定"
+              note: "undoable partial/none の書き込み、または CALL の確定"
       output:
           content:
               type: "TextContent[]"
@@ -888,25 +955,62 @@ mcp_tools:
 
     - name: "render"
       source: "apps/extension/src/tools/render.ts"
-      description: "AudioTrack の指定 beat 範囲を Pre-FX オーディオとしてレンダリングする。"
-      note: "background:true で非同期ジョブ（RenderJob 仮想ラベルで照会、MAX_RENDER_JOBS=50）。同期は filePath を即時返す。"
+      description: "AudioTrack の指定 beat 範囲を Pre-FX レンダリングする（select モード）。source:\"main\" では Main 出力を Resampling で実時間録音する（Main モード）。"
+      note: |
+          select モード（互換）: 従来どおり単一 AudioTrack の Pre-FX。background:true で非同期ジョブ、省略時は同期。
+          main モード（新規）: preview で実行計画（planId）を取得し、planId + requestId + confirm:true で実行。実時間再生のため常に background ジョブ（background:false は REALTIME_REQUIRES_BACKGROUND）。source:"master" は "main" の別名。
+          planId は短命トークン。Set identity（songHandle）・引数 hash・期限を実行直前に再検証する。requestId は冪等性キーで、同じ Set 世代・同じ引数なら既存 job を返す。
+          Main 録音は一時 AudioTrack を作成し loop/punch/record_mode を変更する。終了後に復旧し、一時トラックを削除（keepCaptureTrack:true なら消音・Disarm で保持）。音声は storageDirectory/renders/<jobId>/ に確定コピーし、manifest.json と recovery.json を残す。
+          Main 録音中は書き込み・undo・別 render を拒否する（読み取り・job 照会・CALL render.cancel は許可）。
+          timeUnit は四分音符 beat。duration は拍、durationSeconds は実秒。
       input:
           select:
               type: "string"
-              required: true
-              contract: "AudioTrack を単一ノード変数で RETURN する MATCH"
+              required: false
+              contract: "AudioTrack を単一ノード変数で RETURN する MATCH。source と排他。"
+          source:
+              type: "\"main\" | \"master\""
+              required: false
+              note: "Main 出力の実時間録音。select と排他。master は main へ正規化。"
           startTime:
               type: "number"
               required: true
-              constraints: ["value >= 0"]
+              constraints: ["finite", "value >= 0"]
           endTime:
               type: "number"
               required: true
-              constraints: ["positive", "endTime > startTime"]
+              constraints: ["finite", "positive", "endTime > startTime"]
           background:
               type: "boolean"
               required: false
-              note: "true で { status:started, jobId } を即時返す"
+              note: "select モード: true で非同期。Main モード: 省略時も常にジョブ、false は拒否。"
+          preview:
+              type: "boolean"
+              required: false
+              note: "Main モード: 実行計画と事前検査のみ。OSC 送信・トラック作成をしない。"
+          confirm:
+              type: "boolean"
+              required: false
+              note: "Main モードの実行に必須。"
+          planId:
+              type: "string"
+              required: false
+              note: "Main モードの実行に必須。preview が返す。"
+          requestId:
+              type: "string"
+              required: false
+              note: "Main モードの実行に必須。冪等性キー。"
+          keepCaptureTrack:
+              type: "boolean"
+              required: false
+              default: false
+              note: "true なら録音トラックを消音・Disarm で保持。"
+          preRollBeats:
+              type: "number"
+              required: false
+              default: 0
+              constraints: ["value >= 0"]
+              note: "指定時は開始前を再生する。実際の値を結果へ記録する。"
       output:
           content:
               type: "TextContent[]"
@@ -914,6 +1018,8 @@ mcp_tools:
                   sync_ok:
                       status: "\"ok\""
                       filePath: "string"
+                      source: "\"audio-track-pre-fx\""
+                      method: "\"sdk-pre-fx\""
                       startTime: "number"
                       endTime: "number"
                       duration: "number"
@@ -922,7 +1028,37 @@ mcp_tools:
                   background_started:
                       status: "\"started\""
                       jobId: "string"
+                      source: "\"audio-track-pre-fx\""
+                      method: "\"sdk-pre-fx\""
                       track: "{ index, name, kind:\"audio\" }"
+                      startTime: "number"
+                      endTime: "number"
+                      duration: "number"
+                      hint: "string"
+                  main_preview:
+                      status: "\"preview\""
+                      planId: "string"
+                      source: "\"main\""
+                      method: "\"realtime-resampling\""
+                      timeUnit: "\"quarter-note-beats\""
+                      range: "{ startTime, endTime }"
+                      preRollBeats: "number"
+                      keepCaptureTrack: "boolean"
+                      effects: "string[]"
+                      requiresConfirmation: "true"
+                      limits: "{ maxCaptureBeats, maxArtifactBytes }"
+                      warnings: "string[]"
+                  main_confirm_required:
+                      status: "\"confirm_required\""
+                      source: "\"main\""
+                      planId: "string"
+                      requestId: "string"
+                      requiresConfirmation: "true"
+                  main_started:
+                      status: "\"started\""
+                      jobId: "string"
+                      source: "\"main\""
+                      method: "\"realtime-resampling\""
                       startTime: "number"
                       endTime: "number"
                       duration: "number"
@@ -1066,20 +1202,27 @@ tool_support_models:
             required: true
 
     - name: "RenderJobRecord"
-      source: "apps/extension/src/render/jobs.ts"
+      source: "apps/extension/src/types/hybrid.ts"
       fields:
           - name: "id"
             type: "string"
             required: true
           - name: "status"
-            type: "\"running\" | \"done\" | \"error\""
+            type: "\"running\" | \"done\" | \"error\" | \"cancelled\""
             required: true
           - name: "at"
             type: "string"
             required: true
-          - name: "track"
-            type: "{ index: number, name: string, kind: \"audio\" }"
+          - name: "source"
+            type: "RenderSource（\"audio-track-pre-fx\" | \"main\"）"
             required: true
+          - name: "method"
+            type: "RenderMethod（\"sdk-pre-fx\" | \"realtime-resampling\"）"
+            required: true
+          - name: "phase"
+            type: "RenderPhase"
+            required: true
+            note: "preflight / preparing / armed / preroll / recording / finalizing / exporting / restoring / stopping / completed / failed / cancelled"
           - name: "startTime"
             type: "number"
             required: true
@@ -1089,16 +1232,59 @@ tool_support_models:
           - name: "duration"
             type: "number"
             required: true
+            note: "拍数（旧 API 互換）。"
+          - name: "durationSeconds"
+            type: "number"
+            required: false
+          - name: "audioStatus"
+            type: "AudioStatus（\"pending\" | \"ready\" | \"failed\"）"
+            required: true
+          - name: "cleanupStatus"
+            type: "CleanupStatus（\"pending\" | \"complete\" | \"needs_attention\"）"
+            required: true
+          - name: "track"
+            type: "{ index: number, name: string, kind: \"audio\" }"
+            required: false
+            note: "Pre-FX 経路のみ。"
+          - name: "progress"
+            type: "{ currentBeat, endBeat, fraction }"
+            required: false
           - name: "filePath"
             type: "string"
+            required: false
+          - name: "audio"
+            type: "AudioArtifact（sampleRate, channels, frames, sha256, durationSeconds, sampleFormat）"
+            required: false
+          - name: "requestId"
+            type: "string"
+            required: false
+          - name: "planId"
+            type: "string"
+            required: false
+          - name: "setId"
+            type: "string"
+            required: false
+          - name: "captureTrackRetained"
+            type: "boolean"
             required: false
           - name: "error"
             type: "string"
             required: false
+          - name: "warnings"
+            type: "string[]"
+            required: false
+          - name: "unrecovered"
+            type: "string[]"
+            required: false
+            note: "復旧できなかった項目（cleanupStatus:needs_attention の内訳）。"
+
+    - name: "CaptureJournal"
+      source: "apps/extension/src/types/hybrid.ts"
+      note: "Main 録音ジョブの復旧情報。storageDirectory/renders/<jobId>/recovery.json。before 値・applied 設定値・所有トラック・artifact 確定状態を記録する。クラッシュ後に listJournals で提示する。"
 
     - name: "VirtualLabelSources"
       source: "apps/extension/src/lom/create-adapter.ts"
-      note: "WriteEvent / RenderJob 仮想ノードの供給源"
+      note: "WriteEvent / RenderJob / Transport 仮想ノードの供給源。Transport は OSC 未接続時 null を返し 0 行にする。"
 
     - name: "DoParams"
       source: "apps/extension/src/tools/do.ts"
@@ -1117,8 +1303,11 @@ tool_support_models:
       source: "apps/extension/src/tools/render.ts"
       fields:
           - name: "select"
-            type: "string"
-            required: true
+            type: "string | undefined"
+            required: false
+          - name: "source"
+            type: "\"main\" | \"master\" | undefined"
+            required: false
           - name: "startTime"
             type: "number"
             required: true
@@ -1127,6 +1316,24 @@ tool_support_models:
             required: true
           - name: "background"
             type: "boolean | undefined"
+            required: false
+          - name: "preview"
+            type: "boolean | undefined"
+            required: false
+          - name: "confirm"
+            type: "boolean | undefined"
+            required: false
+          - name: "planId"
+            type: "string | undefined"
+            required: false
+          - name: "requestId"
+            type: "string | undefined"
+            required: false
+          - name: "keepCaptureTrack"
+            type: "boolean | undefined"
+            required: false
+          - name: "preRollBeats"
+            type: "number | undefined"
             required: false
 
     - name: "UndoParams"
@@ -1143,7 +1350,7 @@ tool_result_shapes:
     package_extension:
         command: "pnpm package"
         source: "apps/extension/package.ts"
-        output_path: "apps/extension/dist/live-connector-3.0.0.ablx"
+        output_path: "apps/extension/dist/live-connector-3.1.0.ablx"
         archive_contents:
             - "manifest.json"
             - "dist/extension.js"
@@ -1191,6 +1398,8 @@ tool_result_shapes:
             - status: "ok"
               fields:
                   filePath: "string"
+                  source: "\"audio-track-pre-fx\""
+                  method: "\"sdk-pre-fx\""
                   startTime: "number"
                   endTime: "number"
                   duration: "number"
@@ -1198,11 +1407,58 @@ tool_result_shapes:
             - status: "started"
               fields:
                   jobId: "string"
-                  track: "{ index, name, kind: \"audio\" }"
+                  source: "RenderSource"
+                  method: "RenderMethod"
+                  track: "{ index, name, kind: \"audio\" } | undefined"
                   startTime: "number"
                   endTime: "number"
                   duration: "number"
                   hint: "string"
+            - status: "preview"
+              fields:
+                  planId: "string"
+                  source: "\"main\""
+                  method: "\"realtime-resampling\""
+                  timeUnit: "\"quarter-note-beats\""
+                  range: "{ startTime, endTime }"
+                  effects: "string[]"
+                  requiresConfirmation: "true"
+                  limits: "{ maxCaptureBeats, maxArtifactBytes }"
+                  warnings: "string[]"
+            - status: "confirm_required"
+              fields:
+                  source: "\"main\""
+                  planId: "string"
+                  requestId: "string"
+                  requiresConfirmation: "true"
+    do_call:
+        statuses:
+            - status: "preview"
+              fields:
+                  operation: "string"
+                  effect: "\"runtime\""
+                  undoable: "\"none\""
+                  requiresConfirmation: "true"
+                  args: "ProcedureArgument[]"
+            - status: "confirm_required"
+              fields:
+                  operation: "string"
+                  effect: "\"runtime\""
+                  undoable: "\"none\""
+            - status: "ok"
+              fields:
+                  operation: "string"
+                  effect: "\"runtime\""
+                  undoable: "\"none\""
+                  verified: "boolean"
+                  jobId: "string | undefined（render.cancel）"
+                  jobStatus: "string | undefined（render.cancel）"
+                  cancelAccepted: "boolean | undefined（render.cancel）"
+            - status: "error"
+              fields:
+                  error: "HybridErrorCode | string"
+                  detail: "string"
+                  hint: "string | undefined"
 lom_graph:
     source: "packages/lom-schema/src/schema.ts"
     version: "1.0.0"
@@ -1224,6 +1480,9 @@ lom_graph:
             - "Simpler"
             - "Scene"
             - "CuePoint"
+            - "WriteEvent"
+            - "RenderJob"
+            - "Transport"
     labels:
         - label: "Song"
           description: "Live Set のルート。"
@@ -1357,12 +1616,40 @@ lom_graph:
               - { name: "status", type: "string", access: "r", description: "applied | undone" }
         - label: "RenderJob"
           virtual: true
-          description: "render ツールの非同期ジョブ状態（読み取り専用）。render/jobs.ts が供給。"
+          description: "render ジョブ状態（読み取り専用）。render/jobs.ts が供給。"
           properties:
               - { name: "id", type: "string", access: "r" }
-              - { name: "status", type: "string", access: "r", description: "running | done | error" }
+              - { name: "status", type: "string", access: "r", description: "running | done | error | cancelled" }
+              - { name: "source", type: "string", access: "r", description: "audio-track-pre-fx | main" }
+              - { name: "method", type: "string", access: "r", description: "sdk-pre-fx | realtime-resampling" }
+              - { name: "phase", type: "string", access: "r" }
+              - { name: "audioStatus", type: "string", access: "r", description: "pending | ready | failed" }
+              - { name: "cleanupStatus", type: "string", access: "r", description: "pending | complete | needs_attention" }
+              - { name: "startTime", type: "number", access: "r" }
+              - { name: "endTime", type: "number", access: "r" }
+              - { name: "duration", type: "number", access: "r" }
+              - { name: "durationSeconds", type: "number", access: "r" }
+              - { name: "progressCurrentBeat", type: "number", access: "r" }
+              - { name: "progressEndBeat", type: "number", access: "r" }
+              - { name: "progressFraction", type: "number", access: "r" }
+              - { name: "captureTrackRetained", type: "boolean", access: "r" }
               - { name: "filePath", type: "string", access: "r" }
               - { name: "error", type: "string", access: "r" }
+        - label: "Transport"
+          virtual: true
+          description: "Transport 状態（読み取り専用）。OSC 未接続時は 0 行で、古い値を現在値として返さない。"
+          properties:
+              - { name: "isPlaying", type: "boolean", access: "r" }
+              - { name: "currentSongTime", type: "number", access: "r" }
+              - { name: "tempo", type: "number", access: "r" }
+              - { name: "recordMode", type: "boolean", access: "r" }
+              - { name: "loop", type: "boolean", access: "r" }
+              - { name: "loopStart", type: "number", access: "r" }
+              - { name: "loopLength", type: "number", access: "r" }
+              - { name: "punchIn", type: "boolean", access: "r" }
+              - { name: "punchOut", type: "boolean", access: "r" }
+              - { name: "backToArranger", type: "boolean", access: "r" }
+              - { name: "observedAt", type: "string", access: "r" }
         - label: "TakeLane"
           properties:
               - { name: "index", type: "number", access: "r" }
@@ -1394,11 +1681,12 @@ cypher_contract:
         write_create_anchored: "MATCH <pattern> [WHERE <expr>] CREATE (a)-[:REL]->(n:Label {prop: value, ...})"
         write_delete: "MATCH <pattern> [WHERE <expr>] [DETACH] DELETE n"
         write_copy: "MATCH <pattern> [WHERE <expr>] COPY n"
+        call: "CALL <procedure>(<literal> [, ...])。procedure は許可リストのみ、引数は文字列・数値・真偽値・null のリテラル。動的関数名・変数参照・複数文は不可。"
         pattern: "(node)-[:REL|OTHER*min..max]->(node)"
         node: "(variable?:Label? { property: scalar, ... }?)"
         write_values: "scalar, [scalars], [{key: scalar, ...}]（例: MidiClip SET notes）"
         aggregates: "count(*) / count(var) / count(var.prop) / min|max|avg|sum(var.prop)。非集計項目で暗黙グルーピング。"
-        not_supported: "AS aliases, WITH, count(DISTINCT ...), RETURN after write clauses"
+        not_supported: "AS aliases, WITH, count(DISTINCT ...), RETURN after write clauses, dynamic procedure names, multiple statements"
     default_max_hops_when_omitted: 8
     default_row_limit: 500
     absolute_row_limit: 2000
@@ -1422,7 +1710,8 @@ cypher_contract:
             - "CuePoint"
             - "WriteEvent"
             - "RenderJob"
-        note: "WriteEvent / RenderJob は仮想ラベル（読み取り専用）。Note / Parameter / ClipSlot などは通常の起点にできないが relationship で辿れる。"
+            - "Transport"
+        note: "WriteEvent / RenderJob / Transport は仮想ラベル（読み取り専用）。Note / Parameter / ClipSlot などは通常の起点にできないが relationship で辿れる。"
     read_return_contract:
         tool: "do"
         allowed:
@@ -1436,6 +1725,7 @@ cypher_contract:
             - "SKIP <integer> LIMIT <integer>"
             - "MATCH (e:WriteEvent) RETURN e"
             - "MATCH (j:RenderJob) RETURN j"
+            - "MATCH (t:Transport) RETURN t"
         row_cap_note: "LIMIT 省略時は DEFAULT_ROW_LIMIT(500) で truncated:true。明示 LIMIT も MAX_ROW_LIMIT(2000) でクランプ。"
         aggregation_note: "集計関数と非集計項目を混在させると、非集計項目をキーに暗黙グルーピングする。純集計クエリ（グルーピングキー無し）は空マッチでも 1 行を返す（count / sum = 0、min / max / avg = null）。グルーピングありの空マッチは 0 行。MATCH で束縛されていない変数の集計は hint 付き BadRequestError。min / max は数値に加えて文字列も対象（数値同士は数値比較、それ以外は辞書順）。sum / avg は数値プロパティのみ集計する。パースエラーには対応済み文法の hint が付く。"
     write_contract:
@@ -1472,10 +1762,31 @@ cypher_contract:
             preview: "全書き込みでドライラン可"
             confirm: "undoable partial/none の書き込みは confirm:true 必須。full は件数に関わらず即実行。"
             no_match: "0 件マッチはエラーではなく no_match"
+    procedure_contract:
+        tool: "do"
+        source: "apps/extension/src/runtime/procedures.ts"
+        allowed:
+            - { name: "transport.play", args: "", effect: "runtime", undoable: "none", requires_confirm: true }
+            - { name: "transport.stop", args: "", effect: "runtime", undoable: "none", requires_confirm: true }
+            - { name: "transport.seek", args: "beats:number", effect: "runtime", undoable: "none", requires_confirm: true }
+            - { name: "render.cancel", args: "jobId:string", effect: "runtime", undoable: "none", requires_confirm: true }
+        guards:
+            literals_only: "引数はリテラルのみ。式・変数・動的関数名・複文は拒否する。"
+            preview: "preview:true は OSC 送信を含め副作用ゼロ。"
+            confirm: "confirm:true 必須。confirm なしは confirm_required。"
+            lock: "Main 録音中は書き込み・undo・別 render・transport.play/seek を拒否し、render.cancel と読取は許可する。"
+        note: "手続き実行は tools/do/call.ts。Transport は OSC 経由、render.cancel は録音ジョブの cancel 受理。"
     render_select_contract:
         tool: "render"
-        required: "MATCH で AudioTrack を単一ノード変数で RETURN"
+        required: "MATCH で AudioTrack を単一ノード変数で RETURN（select モード）"
         example: "MATCH (t:AudioTrack {name:\"Print\"}) RETURN t"
+    render_main_contract:
+        tool: "render"
+        required: "source:\"main\"（または \"master\"）。preview → planId + requestId + confirm:true の順。"
+        flow:
+            preview: '{"source":"main","startTime":0,"endTime":64,"preview":true} → status:"preview" + planId'
+            execute: '{"source":"main","startTime":0,"endTime":64,"background":true,"confirm":true,"planId":"...","requestId":"..."} → status:"started"'
+        note: "実時間録音のため background:false は REALTIME_REQUIRES_BACKGROUND。Set identity は songHandle。planId は TTL 付き単発トークン。"
 
 error_models:
     type_namespace: "urn:live-connector:error"
@@ -1502,6 +1813,31 @@ error_models:
         - name: "MethodNotAllowedError"
           status: 405
           type: "urn:live-connector:error:method-not-allowed"
+        - name: "HybridError"
+          status: "constructor args（既定 409）"
+          type: "urn:live-connector:error:hybrid"
+          note: "OSC・Transport・実時間レンダーの機械可読コードを持つ。code は HybridErrorCode。"
+    hybrid_error_codes:
+        - "TRANSPORT_BUSY"
+        - "ARRANGEMENT_NOT_ACTIVE"
+        - "RENDER_BUSY"
+        - "REALTIME_REQUIRES_BACKGROUND"
+        - "INVALID_RANGE"
+        - "PLAN_STALE"
+        - "PLAN_NOT_FOUND"
+        - "REQUEST_ID_CONFLICT"
+        - "SET_IDENTITY_MISMATCH"
+        - "OSC_UNAVAILABLE"
+        - "OSC_PORT_IN_USE"
+        - "OSC_WRITE_UNCERTAIN"
+        - "CAPTURE_ROUTING_UNAVAILABLE"
+        - "ARM_CONFLICT"
+        - "ARTIFACT_STORAGE_UNAVAILABLE"
+        - "UNEXPECTED_RECORDING"
+        - "AUDIO_ARTIFACT_INVALID"
+        - "PROCEDURE_NOT_ALLOWED"
+        - "CAPTURE_CANCELLED"
+        - "RECORDING_LIMIT_EXCEEDED"
     normalization:
         http:
             function: "toProblemDetails"
@@ -1513,7 +1849,7 @@ error_models:
         mcp:
             function: "toMcpError"
             app_error:
-                error: "ConfigError=config / AuthError=unauthorized / BadRequestError=bad_request / NotFoundError=not_found / MethodNotAllowedError=method_not_allowed"
+                error: "ConfigError=config / AuthError=unauthorized / BadRequestError=bad_request / NotFoundError=not_found / MethodNotAllowedError=method_not_allowed / HybridError=HybridErrorCode"
                 detail: "AppError.detail or AppError.title"
                 metadata: "hint / validProperties / validRelationships / validStartLabels when present"
             unknown_error:

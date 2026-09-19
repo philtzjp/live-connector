@@ -3,6 +3,7 @@ export { EXAMPLE_QUERIES, LOM_SCHEMA, query_contract, startable_labels } from ".
 export type {
     LomSchema,
     NodeLabelDef,
+    ProcedureDef,
     PropertyAccess,
     PropertyDef,
     PropertyType,

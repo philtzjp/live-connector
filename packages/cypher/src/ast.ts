@@ -151,9 +151,20 @@ export type ReadStatement = {
     query: Query
 }
 
+/** CALL 手続きに渡せるリテラル引数。動的式・変数参照は受理しない。 */
+export type ProcedureArgument = ScalarValue
+
+export type CallStatement = {
+    kind: "call"
+    /** 許可手続き名（例: "transport.play", "render.cancel"）。 */
+    procedure: string
+    args: ProcedureArgument[]
+}
+
 export type Statement =
     | ReadStatement
     | SetStatement
     | CreateStatement
     | DeleteStatement
     | CopyStatement
+    | CallStatement

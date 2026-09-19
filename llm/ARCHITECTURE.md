@@ -13,11 +13,16 @@ flowchart LR
     mcp["MCP server<br/>apps/extension/src/server/mcp.ts"]
     tools["MCP tools<br/>meta / do / undo / render"]
     do_router["do router<br/>tools/do.ts + executors"]
+    do_call["CALL executor<br/>tools/do/call.ts"]
     cypher["@live-connector/cypher<br/>parser / evaluator / selector"]
     adapter["LomGraphAdapter<br/>+ create-adapter virtual labels"]
     undo_log["undo log<br/>undo/log.ts JSONL"]
     render_jobs["render jobs<br/>render/jobs.ts"]
+    runtime["HybridRuntime<br/>runtime/runtime.ts"]
+    osc["OSC adapter<br/>osc/client + transport + routing"]
+    capture["Main capture<br/>render/resampling.ts + plan + artifacts"]
     sdk["Ableton Extensions SDK"]
+    abletonosc["AbletonOSC Remote Script"]
     live["Ableton Live Set"]
     schema["@live-connector/lom-schema<br/>LOM_SCHEMA / query_contract"]
     env["@live-connector/env"]
@@ -28,15 +33,24 @@ flowchart LR
     http -->|"StreamableHTTPServerTransport"| mcp
     mcp --> tools
     tools --> do_router
+    tools --> do_call
     tools --> undo_log
     tools --> render_jobs
+    tools --> capture
     do_router --> cypher
     tools --> schema
     cypher --> adapter
     adapter --> undo_log
     adapter --> render_jobs
+    adapter --> runtime
     adapter --> sdk
+    do_call --> runtime
+    capture --> runtime
+    capture --> sdk
+    runtime --> osc
+    osc -->|"UDP OSC"| abletonosc
     sdk --> live
+    abletonosc --> live
     http --> env
     tools --> error
     http --> log
@@ -76,7 +90,7 @@ flowchart TB
 
 | パッケージ | 責務 |
 | --- | --- |
-| `apps/extension` | Ableton extension の起動、HTTP/MCP サーバー、4 MCP ツール登録、LOM adapter 実装、undo ログ、render ジョブ |
+| `apps/extension` | Ableton extension の起動、HTTP/MCP サーバー、4 MCP ツール登録、LOM adapter 実装、undo ログ、render ジョブ、Hybrid Runtime（OSC・lock・resolver・capabilities）、Main 実時間録音 |
 | `packages/cypher` | Cypher サブセットの tokenizer/parser/AST/evaluator。Ableton SDK へ依存しない |
 | `packages/lom-schema` | LOM グラフスキーマ、ラベル、プロパティ、リレーション、例クエリ、do 文法契約の正本 |
 | `packages/env` | 環境変数の zod 検証と型付き `Env` の提供 |
@@ -94,6 +108,7 @@ sequenceDiagram
     participant host as Ableton Extension Host
     participant extension as activate()
     participant env as packages/env
+    participant runtime as HybridRuntime
     participant http as Node http server
     participant mcp as MCP server
 
@@ -102,12 +117,14 @@ sequenceDiagram
     extension->>live: initialize(activation, API_VERSION)
     extension->>env: loadEnv(process.env)
     env-->>extension: Env
+    extension->>runtime: new HybridRuntime(env, log)
+    extension->>runtime: start()  (OSC bind, non-blocking)
     extension->>http: startMcpHttpServer({ deps, env, log })
     http-->>extension: ServerInfo
     http->>mcp: createMcpServer(deps) per request
 ```
 
-`activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。`loadEnv()` は loopback host と port を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
+`activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。activation 単位の `HybridRuntime` を生成して OSC を起動し、同じ `runtime` を `ServerDeps` として HTTP サーバーへ渡す。OSC 接続に失敗しても `start()` は例外を投げず、理由を capabilities へ残す（SDK 機能は動作継続）。`loadEnv()` は loopback host と port、OSC host / port、録音上限を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
 
 ## 運用モード
 
@@ -154,10 +171,10 @@ sequenceDiagram
 
 | tool | 種別 | 説明 |
 | --- | --- | --- |
-| `meta` | read | サービス情報、LOM スキーマ、do 文法契約、例文、仮想ラベル、Live Set overview |
-| `do` | read/write | Cypher 文による読み取り（MATCH … RETURN）と書き込み（SET / CREATE / DELETE / COPY） |
-| `undo` | write | do 書き込みの逆操作を LIFO で適用（`steps` または `writeId`） |
-| `render` | read/render | AudioTrack の arrangement pre-FX 音声を WAV にレンダリング（同期または `background:true`） |
+| `meta` | read | サービス情報、LOM スキーマ、do 文法契約、CALL 手続き、capabilities / runtime、例文、仮想ラベル、Live Set overview |
+| `do` | read/write | Cypher 文による読み取り（MATCH … RETURN）、書き込み（SET / CREATE / DELETE / COPY）、限定 CALL（transport / render.cancel） |
+| `undo` | write | do 書き込みの逆操作を LIFO で適用（`steps` または `writeId`）。録音中は拒否 |
+| `render` | read/render | AudioTrack の arrangement pre-FX レンダリング、または Main 出力の実時間録音（`source:"main"`、同期または background ジョブ） |
 
 ## MCP メタデータ
 
@@ -245,6 +262,75 @@ SDK v1.0.0-beta.0 に不足しており、本リポジトリが回避策・scope
 - **選択状態（selection）の読み取り・設定 API**: トラックの生成位置が選択状態に依存する一方、SDK から選択トラックを読むことも設定することもできないため、生成位置を制御も予測もできない。
 - **トラック移動（並べ替え）API**: 生成後に意図した位置へ移動する代替も、トラックの並べ替え API が無いため取れない。
 
+## Hybrid Runtime
+
+`activate()` で 1 度だけ生成する `HybridRuntime`（`apps/extension/src/runtime/runtime.ts`）が OSC 接続・lock・resolver・capabilities を保持する。MCP リクエスト単位や MCP セッション単位では socket を bind しない。
+
+- **OSC adapter**（`apps/extension/src/osc/`）: `node:dgram` で送信 `127.0.0.1:11000` / 受信 `127.0.0.1:11001`（既定 loopback）。AbletonOSC は requestId を持たないため address 単位で直列化し、GET は限定再送、設定系は送信後に読み戻して確認する。読み戻し不一致は `OSC_WRITE_UNCERTAIN`。
+- **lock**（`runtime/locks.ts`）: Main 録音中は書き込み・undo・別 render・`transport.play/seek` を拒否し、読み取り・job 照会・`render.cancel` を許可する。
+- **resolver**（`runtime/resolver.ts`）: 一時トラックの一意名と SDK / OSC のトラック順序を照合し、`SDK handle = OSC index` と仮定しない。不一致時は OSC 変更を送らない。
+- **capabilities**（`runtime/capabilities.ts`）: 未接続・未検証では `available:false` と理由を返す。録音経路の正常性は接続確認だけでは保証できないため `validationLevel` を併記する。
+
+## Main 録音フロー
+
+```mermaid
+sequenceDiagram
+    participant client as MCP client
+    participant render as render tool
+    participant plan as render/plan.ts
+    participant job as render/resampling.ts
+    participant sdk as Extensions SDK
+    participant osc as AbletonOSC (UDP)
+    participant store as render/artifacts.ts
+
+    client->>render: source:main, startTime/endTime, preview:true
+    render->>job: preflight (副作用なし)
+    render->>plan: createRenderPlan(setId, argHash, TTL)
+    plan-->>client: status:preview + planId + warnings
+    client->>render: planId + requestId + confirm:true
+    render->>render: 冪等性 (requestId) → plan 再検証
+    render->>job: startMainCapture (background)
+    job->>sdk: createAudioTrack + unique name
+    job->>osc: Resampling 入力 / Monitor Off / Arm / Sends Only
+    job->>osc: loop / punch / seek + record_mode + play
+    job->>osc: current_song_time 監視 → stop
+    job->>sdk: renderPreFxAudio(captureTrack, start, end)
+    job->>store: finalizeArtifact (検証・コピー・manifest)
+    job->>osc: loop / punch / record_mode / 停止位置を復旧
+    job->>sdk: deleteTrack (keepCaptureTrack=false)
+    job-->>client: RenderJob (phase / audioStatus / cleanupStatus)
+```
+
+`render` の `source:"main"` は preview で計画を返し、実行時に Set identity（`songHandle`）・引数 hash・期限を再検証する。実時間再生のため常に background ジョブで、`background:false` は `REALTIME_REQUIRES_BACKGROUND`。録音は Native Punch で区間を限定し、SDK の `renderPreFxAudio` でファイル化する。状態機械は `preflight → preparing → armed → preroll → recording → finalizing → exporting → restoring → completed`（異常・中断は `stopping → restoring → error / cancelled`）。
+
+## CALL フロー
+
+```mermaid
+sequenceDiagram
+    participant client as MCP client
+    participant do as do tool
+    participant call as tools/do/call.ts
+    participant procs as runtime/procedures.ts
+    participant locks as runtime/locks.ts
+    participant osc as osc/transport.ts
+    participant jobs as render/jobs.ts
+
+    client->>do: CALL transport.play() + confirm:true
+    do->>call: executeCall
+    call->>procs: validateProcedureCall (許可名・型検査)
+    alt preview
+        call-->>client: status:preview (OSC 送信なし)
+    else confirm なし
+        call-->>client: status:confirm_required
+    else 実行
+        call->>locks: assertTransportFree
+        call->>osc: play / waitForPlaying
+        call-->>client: { status:ok, effect:runtime, undoable:none, verified:true }
+    end
+```
+
+`packages/cypher` は CALL を構文解析するだけで SDK に依存しない。許可手続きの登録・型検査は Extension 側（`runtime/procedures.ts`）で行い、Transport は OSC、`render.cancel` は録音ジョブの cancel 受理を担う。
+
 ## データ所有
 
 ```mermaid
@@ -277,4 +363,9 @@ flowchart LR
 - `LomGraphAdapter.seeds()` で開始できるラベルは `Song` / `Track` family / `Clip` family / `Device` family / `Scene` / `CuePoint` / 仮想 `WriteEvent` / `RenderJob` である。
 - `ableton-sdk/` は外部配布物であり、workspace には同梱しない。
 - SDK は Live Set の名称・ファイルパスを公開しない。接続先の変化は `meta` overview / `/health` の構造ダイジェストと `songHandle` の変化で検知する。
-- SDK に MIDI トラックの合成出力を audio 化する手段は無い。`render`（`renderPreFxAudio`）は AudioTrack の pre-FX 音声のみ対象。MIDI 楽器の実音検証は手動 resample が前提（`llm/midi-audition.md`）。
+- SDK に MIDI トラックの合成出力を audio 化する手段は無い。`render` の `select` は AudioTrack の pre-FX 音声のみ対象。MIDI 楽器の実音や Main デバイス込みの完成信号は `render` の `source:"main"`（AbletonOSC 必須）で取得する。個別 MIDI トラックの audio 化は手動 resample が前提（`llm/midi-audition.md`）。
+- SDK v1.0.0 には Transport（再生・停止・シーク・録音・loop/punch・routing・monitoring）を操作する API が無い。これらは AbletonOSC 経由で行い、SDK が得意な Set 編集・Pre-FX レンダーは OSC へ二重実装しない。失敗した書き込みを別 backend で自動再実行しない。
+- AbletonOSC の track 系 getter は応答先頭に track_index を付けて返す（例: `[index, value]`）。requestId が無いため address 単位で直列化し、Timeout は「未適用」ではなく「適用状況不明」として `OSC_WRITE_UNCERTAIN` で扱う。
+- Main 録音は一時 AudioTrack と loop / punch / record_mode / Transport を変更するため、`render` の annotations は保守的に `readOnlyHint:false` / `destructiveHint:true` / `idempotentHint:false` とする。
+- Main 録音は実時間で CPU 負荷の影響を受け、外部クロック・テンポ変化・外部入力依存・無人運用は対応範囲外。実機検証前は `validationLevel:"unverified"`。
+- OSC を無効にしても従来の SDK 機能は動作する。`Transport` 仮想ノードは OSC 未接続時 0 行を返し、古い値を現在値として返さない。

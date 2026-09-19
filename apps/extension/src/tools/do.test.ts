@@ -4,6 +4,7 @@ vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
 import { ClipSlot, Device, MidiClip, MidiTrack, Scene, Song } from "@ableton-extensions/sdk"
 import type { ServerDeps } from "../deps"
+import { createSdkOnlyRuntime } from "../test-support/fake-runtime"
 import { FakeMcpServer } from "../test-support/fake-server"
 import * as undoLog from "../undo/log"
 import type { UndoLogEntry } from "../undo/types"
@@ -224,6 +225,7 @@ function makeDeps(
     return {
         context,
         log: { debug() {}, info() {}, warn() {}, error() {} },
+        runtime: createSdkOnlyRuntime(),
     } as unknown as ServerDeps
 }
 
@@ -584,10 +586,15 @@ describe("undo jsonl roundtrip", () => {
             id: nextRenderJobId(),
             status: "running",
             at: new Date().toISOString(),
+            source: "audio-track-pre-fx",
+            method: "sdk-pre-fx",
+            phase: "exporting",
             track: { index: 0, name: "Drums", kind: "audio" },
             startTime: 0,
             endTime: 4,
             duration: 4,
+            audioStatus: "pending",
+            cleanupStatus: "complete",
         })
 
         const write_events = await server.call("do", {

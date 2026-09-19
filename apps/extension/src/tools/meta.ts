@@ -136,19 +136,29 @@ export function registerMetaTool(server: McpServer, deps: ServerDeps): void {
         },
         async ({ includeClips, trackOffset, trackLimit }) => {
             try {
+                await deps.runtime.refreshOscStatus()
+                const capability_pair = deps.runtime.capabilities()
                 const payload = {
                     service: { name: "live-connector", version: SERVICE_VERSION },
                     schema: LOM_SCHEMA,
                     query_contract,
                     examples: EXAMPLE_QUERIES,
+                    capabilities: capability_pair.render,
+                    runtime: capability_pair.runtime,
                     virtual_labels: {
                         WriteEvent: {
                             description: "do 書き込みの undo ログエントリ（読み取り専用）",
                             query: "MATCH (e:WriteEvent) RETURN e",
                         },
                         RenderJob: {
-                            description: "render ツールの非同期ジョブ状態（読み取り専用）",
+                            description:
+                                "render ジョブ状態（id, status, source, method, phase, progress, audioStatus, cleanupStatus, filePath?）— 読み取り専用",
                             query: "MATCH (j:RenderJob) RETURN j",
+                        },
+                        Transport: {
+                            description:
+                                "Transport 状態（isPlaying, currentSongTime, tempo, recordMode, loop, punch）— 読み取り専用。鮮度は runtime.osc の connected を参照",
+                            query: "MATCH (t:Transport) RETURN t",
                         },
                     },
                     overview: await buildOverview(

@@ -35,6 +35,19 @@ export type RelationshipDef = {
     description?: string
 }
 
+export type ProcedureDef = {
+    /** 手続き名（例: "transport.seek"）。 */
+    name: string
+    /** 引数の型付きシグネチャ（例: "beats:number"）。 */
+    args: string
+    /** 実行時の副作用種別。 */
+    effect: "runtime" | "write"
+    /** undo 可否。"none" は undo ログに載らない。 */
+    undoable: "none"
+    /** confirm:true が必須か。 */
+    requiresConfirm: boolean
+}
+
 export type QueryContract = {
     grammar: string
     start_labels: string[]
@@ -65,9 +78,21 @@ export type QueryContract = {
             no_match: string
         }
     }
+    procedure: {
+        tool: string
+        grammar: string
+        allowed: ProcedureDef[]
+        guards: {
+            literals_only: string
+            preview: string
+            confirm: string
+            lock: string
+        }
+    }
     virtual_labels: {
         WriteEvent: string
         RenderJob: string
+        Transport: string
     }
 }
 

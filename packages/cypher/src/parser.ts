@@ -3,6 +3,7 @@ import type {
     AggregateArg,
     AggregateFunc,
     AggregateItem,
+    CallStatement,
     ComparisonOperator,
     CopyStatement,
     CreateNodePattern,
@@ -13,6 +14,7 @@ import type {
     OrderItem,
     OrderKey,
     PatternPart,
+    ProcedureArgument,
     Query,
     RelationshipPattern,
     ReturnItem,
@@ -30,7 +32,7 @@ const DEFAULT_MAX_HOPS = 8
 
 /** パースエラーに添える対応済み文法の案内。AS / WITH / count(DISTINCT ...) 等の非対応構文を明示する。 */
 const SUPPORTED_GRAMMAR_HINT =
-    "Supported grammar: MATCH (n:Label {prop: value})[-[:REL|REL2*1..2]->(m:Label)] [WHERE ...] RETURN [DISTINCT] n | n.prop | count(*) | ... [ORDER BY ...] [SKIP <int>] [LIMIT <int>]; MATCH ... SET n.prop = <value> [, n.prop2 = <value>]*; CREATE (n:Label {prop: value}); MATCH ... CREATE (a)-[:REL]->(n:Label {prop: value}); MATCH ... [DETACH] DELETE n; MATCH ... COPY n. Write values: scalar, [scalars], [{key: scalar, ...}]. Not supported: AS aliases, WITH, count(DISTINCT ...), RETURN after write clauses."
+    "Supported grammar: MATCH (n:Label {prop: value})[-[:REL|REL2*1..2]->(m:Label)] [WHERE ...] RETURN [DISTINCT] n | n.prop | count(*) | ... [ORDER BY ...] [SKIP <int>] [LIMIT <int>]; MATCH ... SET n.prop = <value> [, n.prop2 = <value>]*; CREATE (n:Label {prop: value}); MATCH ... CREATE (a)-[:REL]->(n:Label {prop: value}); MATCH ... [DETACH] DELETE n; MATCH ... COPY n; CALL transport.play() | transport.stop() | transport.seek(<beats>) | render.cancel(<jobId>). Write values: scalar, [scalars], [{key: scalar, ...}]. Not supported: AS aliases, WITH, count(DISTINCT ...), RETURN after write clauses, dynamic procedure names, multiple statements."
 
 const AGGREGATE_FUNCS = new Set<AggregateFunc>(["count", "min", "max", "avg", "sum"])
 
@@ -77,8 +79,11 @@ class Parser {
         if (first?.type === "keyword" && first.value === "CREATE") {
             return this.parseStandaloneCreate()
         }
+        if (first?.type === "keyword" && first.value === "CALL") {
+            return this.parseCallStatement()
+        }
         if (first?.type !== "keyword" || first.value !== "MATCH") {
-            throw this.error(`Expected keyword "MATCH" or "CREATE"`)
+            throw this.error(`Expected keyword "MATCH", "CREATE", or "CALL"`)
         }
         const match = this.parseMatchClause()
         if (this.peekKeyword("RETURN")) {
@@ -169,6 +174,32 @@ class Parser {
             relationshipType: null,
             node,
         }
+    }
+
+    /**
+     * 限定 CALL 文をパースする。`CALL transport.seek(32)` のように、許可手続き名と
+     * リテラル引数のみを受理する。動的関数名・変数参照・複数文は受理しない。
+     */
+    private parseCallStatement(): CallStatement {
+        this.expectKeyword("CALL")
+        const segments = [this.expectType("identifier").value]
+        while (this.consumePunct(".")) {
+            segments.push(this.expectType("identifier").value)
+        }
+        this.expectPunct("(")
+        const args: ProcedureArgument[] = []
+        if (!this.peekPunct(")")) {
+            do {
+                args.push(this.parseScalar())
+            } while (this.consumePunct(","))
+        }
+        this.expectPunct(")")
+        if (this.pos < this.tokens.length) {
+            throw this.error(
+                "Unexpected token after CALL statement; a single CALL with literal arguments is required",
+            )
+        }
+        return { kind: "call", procedure: segments.join("."), args }
     }
 
     private parseAnchoredCreateStatement(match: MatchClause): CreateStatement {

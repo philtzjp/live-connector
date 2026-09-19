@@ -1,16 +1,6 @@
 /** render ツールのジョブ状態（module singleton）。RenderJob 仮想ラベルの供給源。 */
 
-export type RenderJobRecord = {
-    id: string
-    status: "running" | "done" | "error"
-    at: string
-    track: { index: number; name: string; kind: "audio" }
-    startTime: number
-    endTime: number
-    duration: number
-    filePath?: string
-    error?: string
-}
+import type { RenderJobRecord } from "../types/hybrid"
 
 const MAX_RENDER_JOBS = 50
 
@@ -31,6 +21,20 @@ export function setRenderJob(job: RenderJobRecord): void {
     pruneRenderJobs()
 }
 
+/** 既存ジョブを部分更新する。存在しない場合は何もしない。 */
+export function updateRenderJob(
+    job_id: string,
+    patch: Partial<RenderJobRecord>,
+): RenderJobRecord | undefined {
+    const current = render_jobs.get(job_id)
+    if (current === undefined) {
+        return undefined
+    }
+    const updated: RenderJobRecord = { ...current, ...patch }
+    render_jobs.set(job_id, updated)
+    return updated
+}
+
 export function listRenderJobs(): RenderJobRecord[] {
     return [...render_jobs.values()]
 }
@@ -49,6 +53,19 @@ export function clearRenderJobsForTest(): void {
     render_jobs.clear()
 }
 
+/** requestId と Set identity に一致する実行中ジョブを探す（冪等性判定用）。 */
+export function findRenderJobByRequest(
+    request_id: string,
+    set_id: string,
+): RenderJobRecord | undefined {
+    for (const job of render_jobs.values()) {
+        if (job.requestId === request_id && job.setId === set_id) {
+            return job
+        }
+    }
+    return undefined
+}
+
 function pruneRenderJobs(): void {
     if (render_jobs.size <= MAX_RENDER_JOBS) {
         return
@@ -64,3 +81,4 @@ function pruneRenderJobs(): void {
 }
 
 export const RENDER_JOB_STORE_MAX = MAX_RENDER_JOBS
+export type { RenderJobRecord }

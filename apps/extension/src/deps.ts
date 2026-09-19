@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@ableton-extensions/sdk"
 import type { Logger } from "@live-connector/log"
+import type { HybridRuntime } from "./runtime/runtime"
 
 /** このextensionが対象とする Extensions API バージョン。 */
 export const API_VERSION = "1.0.0" as const
@@ -11,4 +12,5 @@ export type TargetApiVersion = typeof API_VERSION
 export type ServerDeps = {
     context: ExtensionContext<typeof API_VERSION>
     log: Logger
+    runtime: HybridRuntime
 }
