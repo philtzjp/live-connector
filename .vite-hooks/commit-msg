@@ -1,0 +1,77 @@
+#!/bin/sh
+# コミットメッセージが type(scope): 説明 の1行になっているかを検査する。
+
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+
+if echo "$COMMIT_MSG" | grep -qE '^(Merge|fixup!|squash!)'; then
+    exit 0
+fi
+
+VALID_PREFIXES="feat|fix|perf|refactor|docs|style|test|chore|ci|build|merge"
+
+if ! echo "$COMMIT_MSG" | grep -qE "^($VALID_PREFIXES)(\(.+\))?: .+"; then
+    echo "コミットメッセージの形式が不正です: type(scope?): description [$COMMIT_MSG]"
+    exit 1
+fi
+
+if echo "$COMMIT_MSG" | grep -qiE 'Co-Authored-By:'; then
+    echo "Co-Authored-By はコミットメッセージに含められません [$COMMIT_MSG]"
+    exit 1
+fi
+
+if echo "$COMMIT_MSG" | grep -qiE 'Claude-Session:|claude\.ai/code|Generated (with|by) Claude Code'; then
+    echo "ツール由来の署名やセッション URL はコミットメッセージに含められません [$COMMIT_MSG]"
+    exit 1
+fi
+
+COMMIT_BODY=$(echo "$COMMIT_MSG" | sed -E "s/^($VALID_PREFIXES)(\([^)]+\))?: //")
+if echo "$COMMIT_BODY" | grep -qE '[()（）\[\]]'; then
+    echo "本文にかっこ類は使用できません。スコープ表記 type(scope): は許可 [$COMMIT_MSG]"
+    exit 1
+fi
+
+if echo "$COMMIT_MSG" | grep -qiE 'フェーズ|[Pp]hase'; then
+    echo "「フェーズ」「Phase」は使用できません。具体的な変更内容を記述してください [$COMMIT_MSG]"
+    exit 1
+fi
+
+MSG_LINES=$(echo "$COMMIT_MSG" | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$MSG_LINES" -gt 1 ]; then
+    echo "コミットメッセージは1行にしてください [$COMMIT_MSG]"
+    exit 1
+fi
+
+LINT_PROMPT="You are a strict commit message linter. Respond with ONLY 'PASS' or 'FAIL: reason in Japanese'.
+
+Rules:
+- Format: type(scope?): description
+- Description MUST clearly describe a specific code change (what was changed and/or why)
+- FAIL if the description is meaningless, nonsensical, placeholder-like, or does not describe an actual code change
+- FAIL examples: 'fix: a', 'feat: test', 'fix: update', 'chore: changes', 'feat: asdf', 'fix: hoge', 'refactor: stuff'
+- PASS examples: 'fix: null pointer in login flow', 'feat: add user settings page', 'refactor: extract auth middleware'
+
+Message: $COMMIT_MSG"
+
+RESULT=""
+if command -v claude > /dev/null 2>&1; then
+    RESULT=$(claude -p --model claude-sonnet-5 "$LINT_PROMPT" 2>/dev/null)
+fi
+
+if [ -z "$RESULT" ] && command -v codex > /dev/null 2>&1; then
+    CODEX_OUTPUT_FILE=$(mktemp)
+    codex exec --output-last-message "$CODEX_OUTPUT_FILE" "$LINT_PROMPT" > /dev/null 2>&1
+    RESULT=$(cat "$CODEX_OUTPUT_FILE" 2>/dev/null)
+    rm -f "$CODEX_OUTPUT_FILE"
+fi
+
+if [ -n "$RESULT" ] && ! echo "$RESULT" | grep -q "^PASS"; then
+    REASON=$(echo "$RESULT" | sed 's/^FAIL: //' | tr '\n' ' ' | sed 's/  */ /g; s/ *$//')
+    echo "却下 [$COMMIT_MSG] $REASON"
+    exit 1
+fi
+
+exit 0

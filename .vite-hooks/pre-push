@@ -1,0 +1,18 @@
+#!/bin/sh
+# リモートの状態が古いまま push するのを防ぎ、型チェックとテストを通す。
+
+export LANG=ja_JP.UTF-8
+export LC_ALL=ja_JP.UTF-8
+
+GIT_DIR_PATH=$(git rev-parse --absolute-git-dir 2>/dev/null)
+if [ -n "$GIT_DIR_PATH" ] && [ -n "$(git remote 2>/dev/null)" ]; then
+    if [ ! -f "$GIT_DIR_PATH/FETCH_HEAD" ] || [ -z "$(find "$GIT_DIR_PATH/FETCH_HEAD" -mmin -15 2>/dev/null)" ]; then
+        echo "リモートの状態が古い可能性があります。git fetch --prune を実行し、ブランチの乖離・遅れを確認してから push してください"
+        exit 1
+    fi
+fi
+
+pnpm typecheck || exit 1
+pnpm test || exit 1
+
+exit 0

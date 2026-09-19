@@ -144,7 +144,17 @@ pnpm lint        # Biome によるリント
 pnpm format      # Biome によるフォーマット
 ```
 
-`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / parseStatement）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによる meta / do / undo / render ツール層）を検証します。`typecheck` と `test` は lefthook の `pre-push` で実行します。
+`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / parseStatement）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによる meta / do / undo / render ツール層）を検証します。
+
+### git hook
+
+git hook は `.vite-hooks/` にコミットしてあります。clone したら次を一度実行して有効化してください。`core.hooksPath` は `.git/config` に書かれるローカル設定なので、作業環境を作るたびに実行します。
+
+```sh
+git config core.hooksPath .vite-hooks
+```
+
+`commit-msg` はコミットメッセージの形式を、`pre-commit` は `.env*` が dotenvx で暗号化されていることを検査します。`pre-push` は `pnpm typecheck` と `pnpm test` を実行します。
 
 ## ライセンス
 
