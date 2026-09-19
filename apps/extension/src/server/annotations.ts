@@ -13,7 +13,11 @@ const UNDO_WRITE: ToolAnnotations = {
     destructiveHint: true,
     idempotentHint: false,
 }
-const RENDER: ToolAnnotations = { readOnlyHint: false, destructiveHint: false }
+const RENDER: ToolAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+}
 
 export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
     meta: READ_ONLY,

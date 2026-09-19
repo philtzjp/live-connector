@@ -114,6 +114,7 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
         this.virtual_sources = virtual_sources ?? {
             listWriteEvents: async () => [],
             listRenderJobs: async () => [],
+            readTransport: async () => null,
         }
     }
 
@@ -205,11 +206,48 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
                     properties: {
                         id: job.id,
                         status: job.status,
+                        source: job.source,
+                        method: job.method,
+                        phase: job.phase,
+                        audioStatus: job.audioStatus,
+                        cleanupStatus: job.cleanupStatus,
+                        startTime: job.startTime,
+                        endTime: job.endTime,
+                        duration: job.duration,
+                        ...(job.durationSeconds !== undefined
+                            ? { durationSeconds: job.durationSeconds }
+                            : {}),
                         ...(job.filePath !== undefined ? { filePath: job.filePath } : {}),
                         ...(job.error !== undefined ? { error: job.error } : {}),
+                        ...(job.progressCurrentBeat !== undefined
+                            ? { progressCurrentBeat: job.progressCurrentBeat }
+                            : {}),
+                        ...(job.progressEndBeat !== undefined
+                            ? { progressEndBeat: job.progressEndBeat }
+                            : {}),
+                        ...(job.progressFraction !== undefined
+                            ? { progressFraction: job.progressFraction }
+                            : {}),
+                        ...(job.captureTrackRetained !== undefined
+                            ? { captureTrackRetained: job.captureTrackRetained }
+                            : {}),
                     },
                 }),
             )
+        }
+        if (label === "Transport") {
+            const transport = await this.virtual_sources.readTransport()
+            if (transport === null) {
+                return []
+            }
+            return [
+                {
+                    type: "virtual",
+                    label: "Transport",
+                    id: "transport",
+                    properties: transport,
+                },
+            ]
         }
         throw new BadRequestError(
             `Label "${label}" cannot start a pattern. Usable start labels: ${startable_label_hint}. For labels such as Note, Parameter, ClipSlot, Mixer, Chain or TakeLane, start from a usable label and expand with relationships.`,

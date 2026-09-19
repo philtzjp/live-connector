@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import type { ServerDeps } from "../deps"
 import { textResult } from "./common"
+import { executeCall } from "./do/call"
 import { executeCopy } from "./do/copy"
 import { executeCreate } from "./do/create"
 import { executeDelete } from "./do/delete"
@@ -18,13 +19,19 @@ export async function runDoStatement(
     switch (ast.kind) {
         case "read":
             return executeRead(deps, params.statement)
+        case "call":
+            return executeCall(deps, ast, params.preview, params.confirm)
         case "set":
+            deps.runtime.locks.assertWritable()
             return executeSet(deps, params.statement, ast, params.preview, params.confirm)
         case "create":
+            deps.runtime.locks.assertWritable()
             return executeCreate(deps, params.statement, ast, params.preview, params.confirm)
         case "delete":
+            deps.runtime.locks.assertWritable()
             return executeDelete(deps, params.statement, ast, params.preview, params.confirm)
         case "copy":
+            deps.runtime.locks.assertWritable()
             return executeCopy(deps, params.statement, ast, params.preview, params.confirm)
     }
 }

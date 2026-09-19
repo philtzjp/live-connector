@@ -138,6 +138,7 @@ export async function runUndo(
     deps: ServerDeps,
     params: { steps?: number; writeId?: string },
 ): Promise<Record<string, unknown>> {
+    deps.runtime.locks.assertWritable()
     const entries = await listUndoEntries(deps)
     const applied = entries.filter((entry) => entry.status === "applied")
     if (applied.length === 0) {
