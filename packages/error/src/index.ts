@@ -39,6 +39,8 @@ export type AppErrorArgs = {
     status: number
     detail?: string
     metadata?: McpErrorMetadata | undefined
+    /** MCP 応答の機械可読コード。未指定時はクラス名から導出する。 */
+    code?: string
 }
 
 /** すべてのアプリケーションエラーの基底。RFC 9457 の Problem Details に変換できる。 */
@@ -48,6 +50,7 @@ export class AppError extends Error {
     readonly status: number
     readonly detail: string | undefined
     readonly metadata: McpErrorMetadata | undefined
+    readonly code: string | undefined
 
     constructor(args: AppErrorArgs) {
         super(args.detail ?? args.title)
@@ -57,6 +60,7 @@ export class AppError extends Error {
         this.status = args.status
         this.detail = args.detail
         this.metadata = args.metadata
+        this.code = args.code
     }
 
     toProblemDetails(instance?: string): ProblemDetails {
@@ -138,7 +142,50 @@ export class MethodNotAllowedError extends AppError {
     }
 }
 
+/** Hybrid Runtime（OSC・Transport・実時間レンダー）の機械可読エラーコード。 */
+export type HybridErrorCode =
+    | "TRANSPORT_BUSY"
+    | "ARRANGEMENT_NOT_ACTIVE"
+    | "RENDER_BUSY"
+    | "REALTIME_REQUIRES_BACKGROUND"
+    | "INVALID_RANGE"
+    | "PLAN_STALE"
+    | "PLAN_NOT_FOUND"
+    | "REQUEST_ID_CONFLICT"
+    | "SET_IDENTITY_MISMATCH"
+    | "OSC_UNAVAILABLE"
+    | "OSC_PORT_IN_USE"
+    | "OSC_WRITE_UNCERTAIN"
+    | "CAPTURE_ROUTING_UNAVAILABLE"
+    | "ARM_CONFLICT"
+    | "ARTIFACT_STORAGE_UNAVAILABLE"
+    | "UNEXPECTED_RECORDING"
+    | "AUDIO_ARTIFACT_INVALID"
+    | "PROCEDURE_NOT_ALLOWED"
+    | "CAPTURE_CANCELLED"
+    | "RECORDING_LIMIT_EXCEEDED"
+
+/** Hybrid Runtime のエラー。コードで失敗種別を機械可読に伝える。 */
+export class HybridError extends AppError {
+    readonly code: HybridErrorCode
+
+    constructor(code: HybridErrorCode, detail: string, status = 409, metadata?: McpErrorMetadata) {
+        super({
+            type: `${ERROR_TYPE_BASE_URI}:hybrid`,
+            title: "Hybrid Operation Error",
+            status,
+            detail,
+            metadata,
+            code,
+        })
+        this.code = code
+    }
+}
+
 function errorCodeFor(error: AppError): string {
+    if (error.code !== undefined) {
+        return error.code
+    }
     switch (error.name) {
         case "ConfigError":
             return "config"
