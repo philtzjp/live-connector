@@ -68,6 +68,7 @@ flowchart TB
     env["@live-connector/env<br/>packages/env"]
     error["@live-connector/error<br/>packages/error"]
     log["@live-connector/log<br/>packages/log"]
+    json["@live-connector/json<br/>packages/json"]
     tsconfig["@live-connector/tsconfig<br/>packages/tsconfig"]
     ableton["ableton-sdk/<br/>external file dependency"]
 
@@ -77,15 +78,18 @@ flowchart TB
     root --> env
     root --> error
     root --> log
+    root --> json
     root --> tsconfig
     app --> cypher
     app --> lom_schema
     app --> env
     app --> error
     app --> log
+    app --> json
     app --> ableton
     cypher --> error
     env --> error
+    log --> json
 ```
 
 | パッケージ | 責務 |
@@ -96,6 +100,7 @@ flowchart TB
 | `packages/env` | 環境変数の zod 検証と型付き `Env` の提供 |
 | `packages/error` | `AppError` 系のエラー定義、HTTP 用 RFC 9457 Problem Details 変換、MCP 用構造化エラー変換 |
 | `packages/log` | scope 付き logger の生成と標準出力/標準エラーへの集約 |
+| `packages/json` | JSON 直列化の集約。`bigint` を安全整数の範囲内は数値、範囲外は 10 進文字列へ正規化する |
 | `packages/tsconfig` | 共有 TypeScript 設定 |
 
 ## 起動フロー
