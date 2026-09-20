@@ -35,6 +35,9 @@ importers:
       '@live-connector/error':
         specifier: workspace:*
         version: link:../../packages/error
+      '@live-connector/json':
+        specifier: workspace:*
+        version: link:../../packages/json
       '@live-connector/log':
         specifier: workspace:*
         version: link:../../packages/log
@@ -97,7 +100,17 @@ importers:
 
   packages/error: {}
 
-  packages/log: {}
+  packages/json:
+    devDependencies:
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@26.0.1)(vite@8.1.2(@types/node@26.0.1)(esbuild@0.28.1)(tsx@4.22.4))
+
+  packages/log:
+    dependencies:
+      '@live-connector/json':
+        specifier: workspace:*
+        version: link:../json
 
   packages/lom-schema:
     devDependencies:

@@ -1,6 +1,6 @@
 {
     "name": "@live-connector/extension",
-    "version": "3.1.1",
+    "version": "3.1.2",
     "private": true,
     "type": "module",
     "main": "dist/extension.js",
@@ -17,6 +17,7 @@
         "@live-connector/cypher": "workspace:*",
         "@live-connector/env": "workspace:*",
         "@live-connector/error": "workspace:*",
+        "@live-connector/json": "workspace:*",
         "@live-connector/log": "workspace:*",
         "@live-connector/lom-schema": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",

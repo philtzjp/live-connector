@@ -1,5 +1,5 @@
 {
-    "name": "@live-connector/log",
+    "name": "@live-connector/json",
     "version": "0.0.0",
     "private": true,
     "type": "module",
@@ -7,9 +7,10 @@
         ".": "./src/index.ts"
     },
     "scripts": {
-        "typecheck": "tsc --noEmit"
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run"
     },
-    "dependencies": {
-        "@live-connector/json": "workspace:*"
+    "devDependencies": {
+        "vitest": "^4.1.9"
     }
 }
