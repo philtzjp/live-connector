@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { ConfigError } from "@live-connector/error"
+import { stringifyJson } from "@live-connector/json"
 import type { ServerDeps } from "../deps"
 import type { UndoLogEntry } from "./types"
 
@@ -54,7 +55,7 @@ async function writeAllEntries(deps: ServerDeps, entries: UndoLogEntry[]): Promi
     const directory = undoDirectory(deps)
     await mkdir(directory, { recursive: true })
     const body =
-        entries.length === 0 ? "" : `${entries.map((entry) => JSON.stringify(entry)).join("\n")}\n`
+        entries.length === 0 ? "" : `${entries.map((entry) => stringifyJson(entry)).join("\n")}\n`
     await writeFile(undoFilePath(deps), body, "utf8")
 }
 
@@ -68,7 +69,7 @@ async function pruneEntries(entries: UndoLogEntry[]): Promise<UndoLogEntry[]> {
 export async function appendUndoEntry(deps: ServerDeps, entry: UndoLogEntry): Promise<void> {
     const directory = undoDirectory(deps)
     await mkdir(directory, { recursive: true })
-    await appendFile(undoFilePath(deps), `${JSON.stringify(entry)}\n`, "utf8")
+    await appendFile(undoFilePath(deps), `${stringifyJson(entry)}\n`, "utf8")
     const all = await readAllEntries(deps)
     const pruned = await pruneEntries(all)
     if (pruned.length < all.length) {
