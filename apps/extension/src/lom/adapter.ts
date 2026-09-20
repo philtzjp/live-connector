@@ -49,10 +49,11 @@ const VALID_RELATIONSHIP_TYPES = new Set(
 const startable_label_hint = startable_labels.join(", ")
 const unusable_start_label_hint =
     "Start from one of the valid start labels, then expand with relationships to reach Note, Parameter, ClipSlot, Mixer, Chain or TakeLane."
-const relationship_type_hint = LOM_SCHEMA.relationships
-    .map((relationship) => relationship.type)
-    .join(", ")
-const valid_relationship_types = LOM_SCHEMA.relationships.map((relationship) => relationship.type)
+// 同じ関係型が複数の from ラベルを持つ（HAS_DEVICE は Track と Chain）ため重複を除く。
+const valid_relationship_types = [
+    ...new Set(LOM_SCHEMA.relationships.map((relationship) => relationship.type)),
+]
+const relationship_type_hint = valid_relationship_types.join(", ")
 
 const WARP_MODE_NAMES = ["Beats", "Tones", "Texture", "Repitch", "Complex", "ComplexPro"]
 

@@ -1,4 +1,12 @@
-import { AudioTrack, ClipSlot, MidiClip, MidiTrack, Track } from "@ableton-extensions/sdk"
+import {
+    AudioTrack,
+    Chain,
+    ClipSlot,
+    type Device,
+    MidiClip,
+    MidiTrack,
+    Track,
+} from "@ableton-extensions/sdk"
 import type { CreateStatement, ScalarValue, WriteValue } from "@live-connector/cypher"
 import { resolveWriteTargets } from "@live-connector/cypher"
 import { BadRequestError } from "@live-connector/error"
@@ -42,7 +50,7 @@ function readCreateNumber(props: Record<string, WriteValue>, name: string): numb
 }
 
 const SUPPORTED_CREATE_HINT =
-    "CREATE (t:MidiTrack|AudioTrack {name?}); CREATE (s:Scene {index?, name?}); CREATE (c:CuePoint {time, name?}); MATCH (t:Track) CREATE (t)-[:HAS_DEVICE]->(d:Device {name, index?}); MATCH (s:ClipSlot) CREATE (s)-[:HAS_CLIP]->(c:MidiClip {length}) | (c:AudioClip {filePath}); MATCH (t:Track) CREATE (t)-[:HAS_ARRANGEMENT_CLIP]->(c:MidiClip|AudioClip {...}); MATCH (c:MidiClip) CREATE (c)-[:HAS_NOTE]->(n:Note {pitch, startTime, duration, velocity?})"
+    "CREATE (t:MidiTrack|AudioTrack {name?}); CREATE (s:Scene {index?, name?}); CREATE (c:CuePoint {time, name?}); MATCH (t:Track) CREATE (t)-[:HAS_DEVICE]->(d:Device {name, index?}); MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain) CREATE (ch)-[:HAS_DEVICE]->(d:Device {name, index?}); MATCH (s:ClipSlot) CREATE (s)-[:HAS_CLIP]->(c:MidiClip {length}) | (c:AudioClip {filePath}); MATCH (t:Track) CREATE (t)-[:HAS_ARRANGEMENT_CLIP]->(c:MidiClip|AudioClip {...}); MATCH (c:MidiClip) CREATE (c)-[:HAS_NOTE]->(n:Note {pitch, startTime, duration, velocity?})"
 
 export async function executeCreate(
     deps: ServerDeps,
@@ -76,13 +84,17 @@ export async function executeCreate(
     const inverse_items: InverseDeleteCreated["items"] = []
 
     if (preview === true) {
-        return {
+        const base = {
             status: "preview",
             matched: anchors.length,
             label,
             relationship: ast.relationshipType,
             properties: ast.node.createProperties,
         }
+        if (ast.relationshipType === "HAS_DEVICE" && label === "Device") {
+            return { ...base, targets: previewDeviceInserts(anchors, ast.node.createProperties) }
+        }
+        return base
     }
 
     const write_context = beginWrite(statement, "create", `create ${label}`, "full")
@@ -211,6 +223,91 @@ async function executeStandaloneCreate(
     })
 }
 
+type DeviceHost = { label: "Track" | "Chain"; value: Track<V> | Chain<V>; deviceCount: number }
+
+/** HAS_DEVICE の CREATE が受け付けるアンカー（Track または Rack の Chain）を取り出す。 */
+function deviceHost(anchor: LomNode): DeviceHost {
+    if (anchor.type === "object" && anchor.value instanceof Track) {
+        return { label: "Track", value: anchor.value, deviceCount: anchor.value.devices.length }
+    }
+    if (anchor.type === "object" && anchor.value instanceof Chain) {
+        return { label: "Chain", value: anchor.value, deviceCount: anchor.value.devices.length }
+    }
+    throw new BadRequestError("HAS_DEVICE CREATE requires a Track or Chain anchor", {
+        hint: "Anchor on a Track, or on a rack Chain reached with MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain).",
+    })
+}
+
+/**
+ * 挿入位置を決める。省略時はデバイスチェーンの末尾。
+ * 範囲外はエラーにする（暗黙に丸めると意図しない位置へ挿入されるため）。
+ */
+function resolveDeviceInsertIndex(props: Record<string, WriteValue>, host: DeviceHost): number {
+    const index = readCreateNumber(props, "index")
+    if (index === undefined) {
+        return host.deviceCount
+    }
+    if (!Number.isInteger(index) || index < 0 || index > host.deviceCount) {
+        throw new BadRequestError(
+            `Device index ${index} is out of range for this ${host.label} (valid: 0 to ${host.deviceCount})`,
+            {
+                hint: "Omit index to append at the end of the device chain.",
+            },
+        )
+    }
+    return index
+}
+
+/**
+ * 挿入失敗の理由を、内蔵デバイス名カタログとの照合結果を添えて返す。
+ * カタログは手動管理でありエディション差で漏れうるため、照合は説明の材料としてのみ使う。
+ */
+function deviceInsertError(
+    device_name: string,
+    host_label: string,
+    error: unknown,
+): BadRequestError {
+    const in_catalog = CATALOG_DEVICE_NAMES.includes(device_name)
+    const cause = error instanceof Error ? error.message : String(error)
+    if (in_catalog) {
+        return new BadRequestError(
+            `Live rejected inserting "${device_name}" into this ${host_label} (${cause})`,
+            {
+                hint: "The name is a known built-in device. It may be unavailable in this Live edition, or not valid for this device chain (for example an instrument on an audio track).",
+                validDeviceNames: CATALOG_DEVICE_NAMES,
+            },
+        )
+    }
+    return new BadRequestError(
+        `Live rejected inserting "${device_name}" into this ${host_label} (${cause})`,
+        {
+            hint: "Only devices native to Live can be inserted; third-party plug-ins cannot be loaded this way. Check the spelling against validDeviceNames.",
+            validDeviceNames: CATALOG_DEVICE_NAMES,
+        },
+    )
+}
+
+/** preview で返す、アンカーごとの挿入予定（デバイス名と解決後の位置）。 */
+function previewDeviceInserts(
+    anchors: LomNode[],
+    props: Record<string, WriteValue>,
+): Record<string, unknown>[] {
+    const device_name = readCreateString(props, "name")
+    if (device_name === undefined) {
+        throw new BadRequestError("CREATE Device requires {name: string}")
+    }
+    return anchors.map((anchor) => {
+        const host = deviceHost(anchor)
+        return {
+            insertInto: host.label,
+            name: device_name,
+            index: resolveDeviceInsertIndex(props, host),
+            existingDeviceCount: host.deviceCount,
+            inCatalog: CATALOG_DEVICE_NAMES.includes(device_name),
+        }
+    })
+}
+
 async function createAnchored(
     deps: ServerDeps,
     anchor: LomNode,
@@ -222,28 +319,27 @@ async function createAnchored(
     const _song = deps.context.application.song
 
     if (rel === "HAS_DEVICE" && label === "Device") {
-        if (anchor.type !== "object" || !(anchor.value instanceof Track)) {
-            throw new BadRequestError("HAS_DEVICE CREATE requires a Track anchor")
-        }
+        const host = deviceHost(anchor)
         const device_name = readCreateString(props, "name")
         if (device_name === undefined) {
             throw new BadRequestError("CREATE Device requires {name: string}")
         }
-        const index = readCreateNumber(props, "index")
-        const track = anchor.value
-        const insert_index = index ?? track.devices.length
-        let device: import("@ableton-extensions/sdk").Device<V>
+        const insert_index = resolveDeviceInsertIndex(props, host)
+        let device: Device<V>
         try {
             device = await deps.context.withinTransaction(() =>
-                track.insertDevice(device_name, insert_index),
+                host.value.insertDevice(device_name, insert_index),
             )
-        } catch {
-            throw new BadRequestError(`failed to insert device "${device_name}"`, {
-                hint: `Valid catalog names include: ${CATALOG_DEVICE_NAMES.slice(0, 8).join(", ")}...`,
-            })
+        } catch (error) {
+            throw deviceInsertError(device_name, host.label, error)
         }
         return {
-            summary: { label: "Device", name: device.name, index: insert_index },
+            summary: {
+                label: "Device",
+                name: device.name,
+                index: insert_index,
+                insertedInto: host.label,
+            },
             identity: objectIdentity(device),
             label: "Device",
         }
