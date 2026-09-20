@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@ableton-extensions/sdk", () => import("../test-support/fake-sdk"))
 
-import { ClipSlot, Device, MidiClip, MidiTrack, Scene, Song } from "@ableton-extensions/sdk"
+import {
+    Chain,
+    ClipSlot,
+    Device,
+    MidiClip,
+    MidiTrack,
+    RackDevice,
+    Scene,
+    Song,
+} from "@ableton-extensions/sdk"
 import type { ServerDeps } from "../deps"
 import { createSdkOnlyRuntime } from "../test-support/fake-runtime"
 import { FakeMcpServer } from "../test-support/fake-server"
@@ -774,5 +783,202 @@ describe("preview bigint serialization", () => {
         expect(result.isError).toBe(false)
         const rows = json.rows as Record<string, unknown>[]
         expect(rows[0]?.["s.rootNote"]).toBe(0)
+    })
+})
+
+describe("built-in device insert", () => {
+    let storage_directory = "/tmp/live-connector-test"
+
+    beforeEach(() => {
+        clearRenderJobsForTest()
+        storage_directory = `/tmp/live-connector-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    })
+
+    type ChainFixture = InstanceType<typeof Chain> & {
+        devices: InstanceType<typeof Device>[]
+        insertDevice: ReturnType<typeof vi.fn>
+    }
+
+    /** Rack デバイスと、その内側のチェーンを fixture のトラックへ追加する。 */
+    function addRack(track: TrackFixture): ChainFixture {
+        const chain = Object.assign(Object.create(Chain.prototype), {
+            handle: { id: 300n },
+            devices: [] as InstanceType<typeof Device>[],
+            insertDevice: vi.fn(),
+        }) as ChainFixture
+
+        chain.insertDevice.mockImplementation(async (name: string, index: number) => {
+            const device = Object.assign(Object.create(Device.prototype), {
+                name,
+                handle: { id: 400n + BigInt(chain.devices.length) },
+                parameters: [],
+                parent: chain,
+            })
+            chain.devices.splice(index, 0, device)
+            return device
+        })
+
+        const rack = Object.assign(Object.create(RackDevice.prototype), {
+            name: "Instrument Rack",
+            handle: { id: 200n },
+            parameters: [],
+            chains: [chain],
+            parent: track,
+        })
+        track.devices.push(rack)
+        return chain
+    }
+
+    it("内蔵インストゥルメントを MIDI トラックへ挿入できる", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})',
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        expect(json.status).toBe("ok")
+        const created = json.created as Record<string, unknown>[]
+        expect(created[0]).toMatchObject({ label: "Device", name: "Wavetable", index: 0 })
+        expect(track.devices.map((device) => device.name)).toEqual(["Wavetable"])
+    })
+
+    it("内蔵エフェクトを任意の位置へ挿入できる", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        await track.insertDevice("Wavetable", 0)
+
+        await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Reverb", index:0})',
+        })
+
+        expect(track.devices.map((device) => device.name)).toEqual(["Reverb", "Wavetable"])
+    })
+
+    it("index を省略するとデバイスチェーンの末尾へ挿入する", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        await track.insertDevice("Wavetable", 0)
+
+        await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Reverb"})',
+        })
+
+        expect(track.devices.map((device) => device.name)).toEqual(["Wavetable", "Reverb"])
+    })
+
+    it("範囲外の index はエラーを返す", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Reverb", index:5})',
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(true)
+        expect(String(json.detail)).toContain("out of range")
+        expect(String(json.hint)).toContain("Omit index")
+    })
+
+    it("挿入に失敗した名前は理由とカタログを添えて返す", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        track.insertDevice.mockRejectedValueOnce(new Error("device not found"))
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Serum"})',
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(true)
+        expect(String(json.detail)).toContain("Serum")
+        expect(String(json.hint)).toContain("third-party plug-ins")
+        expect(json.validDeviceNames).toContain("Wavetable")
+    })
+
+    it("カタログにある名前の失敗はエディション差の可能性を示す", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        track.insertDevice.mockRejectedValueOnce(new Error("device unavailable"))
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})',
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(true)
+        expect(String(json.hint)).toContain("Live edition")
+    })
+
+    it("preview は挿入先とデバイス名と位置を返す", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        await track.insertDevice("Wavetable", 0)
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Reverb"})',
+            preview: true,
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(json.status).toBe("preview")
+        const targets = json.targets as Record<string, unknown>[]
+        expect(targets[0]).toEqual({
+            insertInto: "Track",
+            name: "Reverb",
+            index: 1,
+            existingDeviceCount: 1,
+            inCatalog: true,
+        })
+        expect(track.devices.map((device) => device.name)).toEqual(["Wavetable"])
+    })
+
+    it("Rack のチェーン内へ挿入できる", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+        const chain = addRack(track)
+
+        const result = await server.call("do", {
+            statement:
+                'MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain) CREATE (ch)-[:HAS_DEVICE]->(d:Device {name:"Operator"})',
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        const created = json.created as Record<string, unknown>[]
+        expect(created[0]).toMatchObject({ name: "Operator", insertedInto: "Chain", index: 0 })
+        expect(chain.devices.map((device) => device.name)).toEqual(["Operator"])
+    })
+
+    it("挿入したデバイスを undo で取り除く", async () => {
+        const deps = makeDeps({}, storage_directory)
+        const server = await buildRegisteredServer(deps)
+        const track = songTrack(deps)
+
+        await server.call("do", {
+            statement:
+                'MATCH (t:MidiTrack {name:"Drums"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Reverb"})',
+        })
+        expect(track.devices).toHaveLength(1)
+
+        await undoViaSerializedLog(deps)
+        expect(track.devices).toHaveLength(0)
     })
 })
