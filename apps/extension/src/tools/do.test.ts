@@ -15,6 +15,7 @@ import {
 import type { ServerDeps } from "../deps"
 import { createSdkOnlyRuntime } from "../test-support/fake-runtime"
 import { FakeMcpServer } from "../test-support/fake-server"
+import { runWithinTransaction } from "../test-support/fake-transaction"
 import * as undoLog from "../undo/log"
 import type { UndoLogEntry } from "../undo/types"
 import { DEFAULT_ROW_LIMIT } from "./do/row-cap"
@@ -222,7 +223,7 @@ function makeDeps(
 
     const context = {
         application: { song },
-        withinTransaction: async <T>(fn: () => T | Promise<T>) => fn(),
+        withinTransaction: runWithinTransaction,
         environment: { storageDirectory: storage_directory },
         resources: {
             importIntoProject: vi.fn(async (path: string) => path),
@@ -980,5 +981,39 @@ describe("built-in device insert", () => {
 
         await undoViaSerializedLog(deps)
         expect(track.devices).toHaveLength(0)
+    })
+})
+
+describe("withinTransaction の同期契約", () => {
+    let storage_directory = "/tmp/live-connector-test"
+
+    beforeEach(() => {
+        clearRenderJobsForTest()
+        storage_directory = `/tmp/live-connector-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    })
+
+    it("生成と命名は別のトランザクションになる", async () => {
+        const within_transaction = vi.fn(<T>(fn: () => T): T => runWithinTransaction(fn))
+        const deps = makeDeps({ withinTransaction: within_transaction }, storage_directory)
+        const server = await buildRegisteredServer(deps)
+
+        const result = await server.call("do", {
+            statement: 'CREATE (t:MidiTrack {name:"Bass"})',
+        })
+
+        expect(result.isError).toBe(false)
+        // 生成の発行で 1 回、生成後の命名で 1 回。SDK のコールバックは同期でなければならず、
+        // 生成の完了を待つ時点でトランザクションは閉じているため 1 回には束ねられない。
+        expect(within_transaction).toHaveBeenCalledTimes(2)
+    })
+
+    it("名前を指定しない生成はトランザクションを 1 回だけ使う", async () => {
+        const within_transaction = vi.fn(<T>(fn: () => T): T => runWithinTransaction(fn))
+        const deps = makeDeps({ withinTransaction: within_transaction }, storage_directory)
+        const server = await buildRegisteredServer(deps)
+
+        await server.call("do", { statement: "CREATE (t:MidiTrack)" })
+
+        expect(within_transaction).toHaveBeenCalledTimes(1)
     })
 })

@@ -28,15 +28,19 @@ async function recreateArrangementMidiClip(
             `track ${blueprint.trackIdentity} not found for arrangement MidiClip recreate`,
         )
     }
-    return deps.context.withinTransaction(async () => {
-        const created = await track.createMidiClip(blueprint.startTime, blueprint.duration)
+    // withinTransaction のコールバックは同期でなければならない。生成の完了を待つ時点で
+    // トランザクションは閉じているため、属性の書き戻しは別トランザクションへまとめる。
+    const created = await deps.context.withinTransaction(() =>
+        track.createMidiClip(blueprint.startTime, blueprint.duration),
+    )
+    deps.context.withinTransaction(() => {
         created.notes = blueprint.notes as MidiClip<V>["notes"]
         created.name = blueprint.name
         created.color = blueprint.color
         created.muted = blueprint.muted
         created.looping = blueprint.looping
-        return created
     })
+    return created
 }
 
 async function recreateArrangementAudioClip(
@@ -49,8 +53,8 @@ async function recreateArrangementAudioClip(
             `track ${blueprint.trackIdentity} not found for arrangement AudioClip recreate`,
         )
     }
-    return deps.context.withinTransaction(async () => {
-        const created = await track.createAudioClip({
+    const created = await deps.context.withinTransaction(() =>
+        track.createAudioClip({
             filePath: blueprint.filePath,
             startTime: blueprint.startTime,
             duration: blueprint.duration,
@@ -62,13 +66,15 @@ async function recreateArrangementAudioClip(
                 loopStart: blueprint.loopStart,
                 loopEnd: blueprint.loopEnd,
             },
-        })
+        }),
+    )
+    deps.context.withinTransaction(() => {
         created.warpMode = warpModeFromBlueprint(blueprint.warpMode)
         created.name = blueprint.name
         created.color = blueprint.color
         created.muted = blueprint.muted
-        return created
     })
+    return created
 }
 
 async function recreateSessionMidiClip(
@@ -85,15 +91,17 @@ async function recreateSessionMidiClip(
             `ClipSlot ${blueprint.trackIdentity}:${blueprint.slotIndex} not found`,
         )
     }
-    return deps.context.withinTransaction(async () => {
-        const created = await slot.createMidiClip(blueprint.length)
+    const created = await deps.context.withinTransaction(() =>
+        slot.createMidiClip(blueprint.length),
+    )
+    deps.context.withinTransaction(() => {
         created.notes = blueprint.notes as MidiClip<V>["notes"]
         created.name = blueprint.name
         created.color = blueprint.color
         created.muted = blueprint.muted
         created.looping = blueprint.looping
-        return created
     })
+    return created
 }
 
 async function recreateSessionAudioClip(
@@ -110,16 +118,18 @@ async function recreateSessionAudioClip(
             `ClipSlot ${blueprint.trackIdentity}:${blueprint.slotIndex} not found`,
         )
     }
-    return deps.context.withinTransaction(async () => {
-        const created = await slot.createAudioClip({ filePath: blueprint.filePath })
+    const created = await deps.context.withinTransaction(() =>
+        slot.createAudioClip({ filePath: blueprint.filePath }),
+    )
+    deps.context.withinTransaction(() => {
         created.name = blueprint.name
         created.color = blueprint.color
         created.muted = blueprint.muted
         created.looping = blueprint.looping
         created.warping = blueprint.warping
         created.warpMode = warpModeFromBlueprint(blueprint.warpMode)
-        return created
     })
+    return created
 }
 
 async function recreateDevice(
@@ -162,20 +172,20 @@ export async function applyRecreate(
 
     for (const blueprint of inverse.blueprints) {
         if (blueprint.kind === "cue_point") {
-            const cue = await deps.context.withinTransaction(async () => {
-                const created = await song.createCuePoint(blueprint.time)
-                created.name = blueprint.name
-                return created
+            const cue = await deps.context.withinTransaction(() =>
+                song.createCuePoint(blueprint.time),
+            )
+            deps.context.withinTransaction(() => {
+                cue.name = blueprint.name
             })
             recreated.push({ label: "CuePoint", time: cue.time, name: cue.name })
             continue
         }
         if (blueprint.kind === "scene") {
-            const scene = await deps.context.withinTransaction(async () => {
-                const insert_index = Math.min(blueprint.index, song.scenes.length)
-                const created = await song.createScene(insert_index)
-                created.name = blueprint.name
-                return created
+            const insert_index = Math.min(blueprint.index, song.scenes.length)
+            const scene = await deps.context.withinTransaction(() => song.createScene(insert_index))
+            deps.context.withinTransaction(() => {
+                scene.name = blueprint.name
             })
             recreated.push({ label: "Scene", index: blueprint.index, name: scene.name })
             continue
