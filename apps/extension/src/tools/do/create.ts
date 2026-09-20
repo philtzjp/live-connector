@@ -128,14 +128,16 @@ async function executeStandaloneCreate(
         }
         const write_context = beginWrite(statement, "create", `create ${label}`, "full")
         const song = deps.context.application.song
-        const track = await deps.context.withinTransaction(async () => {
-            const created =
-                label === "MidiTrack" ? await song.createMidiTrack() : await song.createAudioTrack()
-            if (name !== undefined) {
-                created.name = name
-            }
-            return created
-        })
+        // withinTransaction のコールバックは同期でなければならないため、生成の発行と
+        // 生成後の命名は別のトランザクションになる（1 undo ステップには束ねられない）。
+        const track = await deps.context.withinTransaction(() =>
+            label === "MidiTrack" ? song.createMidiTrack() : song.createAudioTrack(),
+        )
+        if (name !== undefined) {
+            deps.context.withinTransaction(() => {
+                track.name = name
+            })
+        }
         const index = song.tracks.findIndex((candidate) => candidate.handle === track.handle)
         const identity = objectIdentity(track)
         if (identity !== null) {
@@ -164,13 +166,12 @@ async function executeStandaloneCreate(
             return { status: "preview", label, index, name: name ?? null }
         }
         const write_context = beginWrite(statement, "create", "create Scene", "full")
-        const scene = await deps.context.withinTransaction(async () => {
-            const created = await song.createScene(index)
-            if (name !== undefined) {
-                created.name = name
-            }
-            return created
-        })
+        const scene = await deps.context.withinTransaction(() => song.createScene(index))
+        if (name !== undefined) {
+            deps.context.withinTransaction(() => {
+                scene.name = name
+            })
+        }
         const created_index = song.scenes.findIndex((c) => c.handle === scene.handle)
         const identity = objectIdentity(scene)
         if (identity !== null) {
@@ -197,13 +198,12 @@ async function executeStandaloneCreate(
         }
         const write_context = beginWrite(statement, "create", "create CuePoint", "full")
         const song = deps.context.application.song
-        const cue = await deps.context.withinTransaction(async () => {
-            const created = await song.createCuePoint(time)
-            if (name !== undefined) {
-                created.name = name
-            }
-            return created
-        })
+        const cue = await deps.context.withinTransaction(() => song.createCuePoint(time))
+        if (name !== undefined) {
+            deps.context.withinTransaction(() => {
+                cue.name = name
+            })
+        }
         const identity = objectIdentity(cue)
         if (identity !== null) {
             write_context.inverse.push({
@@ -399,13 +399,14 @@ async function createAnchored(
         }
         const name = readCreateString(props, "name")
         if (label === "MidiClip" && track instanceof MidiTrack) {
-            const clip = await deps.context.withinTransaction(async () => {
-                const created = await track.createMidiClip(start_time, duration)
-                if (name !== undefined) {
-                    created.name = name
-                }
-                return created
-            })
+            const clip = await deps.context.withinTransaction(() =>
+                track.createMidiClip(start_time, duration),
+            )
+            if (name !== undefined) {
+                deps.context.withinTransaction(() => {
+                    clip.name = name
+                })
+            }
             return {
                 summary: { label: "MidiClip", startTime: start_time, duration, name: clip.name },
                 identity: objectIdentity(clip),
@@ -419,18 +420,19 @@ async function createAnchored(
             }
             await assertSampleFile(file_path)
             const is_warped = readCreateProperty(props, "isWarped")
-            const clip = await deps.context.withinTransaction(async () => {
-                const created = await track.createAudioClip({
+            const clip = await deps.context.withinTransaction(() =>
+                track.createAudioClip({
                     filePath: file_path,
                     startTime: start_time,
                     duration,
                     ...(typeof is_warped === "boolean" ? { isWarped: is_warped } : {}),
+                }),
+            )
+            if (name !== undefined) {
+                deps.context.withinTransaction(() => {
+                    clip.name = name
                 })
-                if (name !== undefined) {
-                    created.name = name
-                }
-                return created
-            })
+            }
             return {
                 summary: {
                     label: "AudioClip",

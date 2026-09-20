@@ -66,15 +66,19 @@ async function recreateFromBlueprint(
         if (!(track instanceof MidiTrack)) {
             throw new BadRequestError("arrangement MidiClip requires MidiTrack")
         }
-        return deps.context.withinTransaction(async () => {
-            const created = await track.createMidiClip(start, duration)
+        // withinTransaction のコールバックは同期でなければならない。生成の完了を待つ時点で
+        // トランザクションは閉じているため、属性の書き戻しは別トランザクションへまとめる。
+        const created = await deps.context.withinTransaction(() =>
+            track.createMidiClip(start, duration),
+        )
+        deps.context.withinTransaction(() => {
             created.notes = (overrides.notes ?? blueprint.notes) as MidiClip<V>["notes"]
             created.name = blueprint.name
             created.color = blueprint.color
             created.muted = blueprint.muted
             created.looping = blueprint.looping
-            return created
         })
+        return created
     }
 
     if (!(track instanceof AudioTrack)) {
@@ -87,20 +91,22 @@ async function recreateFromBlueprint(
         loopStart: overrides.loopStart ?? blueprint.loopStart,
         loopEnd: overrides.loopEnd ?? blueprint.loopEnd,
     }
-    return deps.context.withinTransaction(async () => {
-        const created = await track.createAudioClip({
+    const created = await deps.context.withinTransaction(() =>
+        track.createAudioClip({
             filePath: blueprint.filePath,
             startTime: start,
             duration,
             isWarped: blueprint.warping,
             loopSettings: loop_settings,
-        })
+        }),
+    )
+    deps.context.withinTransaction(() => {
         created.warpMode = warpModeFromBlueprint(blueprint.warpMode)
         created.name = blueprint.name
         created.color = blueprint.color
         created.muted = blueprint.muted
-        return created
     })
+    return created
 }
 
 async function findTrackForBlueprint(deps: ServerDeps, track_identity: string): Promise<Track<V>> {
