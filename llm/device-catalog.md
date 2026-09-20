@@ -2,6 +2,8 @@
 
 `do` CREATE Device の内蔵デバイスカタログ（`apps/extension/src/tools/do/devices.ts` の `CATALOG_DEVICE_NAMES`）は手動管理の定数である。SDK v1.0.0-beta.1 に Browser（デバイス列挙）API が無いため、実機でのロード可否と自動同期しない。Live のバージョン・エディション差で乖離が生じ得る。
 
+このためカタログは挿入の事前検証には使わない。カタログ外の名前を拒否すると、カタログから漏れた実在の内蔵デバイスを挿入できなくなるため、挿入は SDK（`Track.insertDevice` / `Chain.insertDevice`、v1.0.0-beta.1 で公開）へ委ね、失敗したときの説明とエラーの `validDeviceNames` にのみカタログを使う。カタログ外の名前の失敗にはサードパーティ製プラグインが読み込めない旨を、カタログ内の名前の失敗にはエディション差や挿入先の不一致の可能性を添える。
+
 ## 検証手段
 
 v3.0.0 で `verify_device_catalog` ツールは**廃止**された。実機検証は以下のいずれかで行う。
