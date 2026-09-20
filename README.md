@@ -17,7 +17,7 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 
 ## インストール
 
-1. `live-connector-3.1.0.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
+1. `live-connector-3.1.1.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -32,7 +32,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"3.1.0","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
+{"status":"pass","version":"3.1.1","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
 ```
 
 ## Claude Code で使う
@@ -126,7 +126,7 @@ MATCH (j:RenderJob {id:"render-xxxxx"}) RETURN j.phase, j.progressFraction, j.au
 - インストール済み `.ablx` を使う場合、Developer Mode は OFF にします。
 - `localhost:7799` が起動しない場合は、Ableton Live を再起動し、`/health` を確認してください。
 - v3.0.0 は **破壊的変更**です。v2.x の個別ツール名（`query` / `set_track` / `render_audio` 等）は存在しません。
-- Ableton Extensions SDK v1.0.0-beta.0 には Browser API がないため、`.adv` / `.adg` / third-party plug-in のネイティブプリセットを Live へ直接読み込むことはできません。
+- Ableton Extensions SDK v1.0.0-beta.1 には Browser API がないため、`.adv` / `.adg` / third-party plug-in のネイティブプリセットを Live へ直接読み込むことはできません。
 - third-party plug-in の非公開内部状態や波形選択は保存・復元できません。デバイスパラメータの保存・復元は `do` read で Parameter 値を取得し、`do` SET で再適用してください（旧 `save_device_state` / `apply_device_state` は廃止）。
 - SDK には MIDI 楽器トラックの合成出力を audio 化する手段がありません。`render` の `select` モードは AudioTrack の pre-FX 音声のみ対象です。MIDI 楽器の実音や Main のデバイスを通した完成信号は、`render` の `source:"main"`（AbletonOSC 必須）で Main 出力を実時間録音して取得します。個別の MIDI トラックを audio 化する従来手順は `llm/midi-audition.md` を参照してください。
 - Main 録音は実時間で行われ、CPU 不足やドロップアウトの影響を受け得ます。テンポ変化・外部入力依存・無人運用は対応範囲外です。

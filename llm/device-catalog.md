@@ -1,6 +1,6 @@
 # 内蔵デバイスカタログの実機整合
 
-`do` CREATE Device の内蔵デバイスカタログ（`apps/extension/src/tools/do/devices.ts` の `CATALOG_DEVICE_NAMES`）は手動管理の定数である。SDK v1.0.0-beta.0 に Browser（デバイス列挙）API が無いため、実機でのロード可否と自動同期しない。Live のバージョン・エディション差で乖離が生じ得る。
+`do` CREATE Device の内蔵デバイスカタログ（`apps/extension/src/tools/do/devices.ts` の `CATALOG_DEVICE_NAMES`）は手動管理の定数である。SDK v1.0.0-beta.1 に Browser（デバイス列挙）API が無いため、実機でのロード可否と自動同期しない。Live のバージョン・エディション差で乖離が生じ得る。
 
 ## 検証手段
 

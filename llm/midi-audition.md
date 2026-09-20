@@ -2,7 +2,7 @@
 
 ## SDK の能力境界
 
-Ableton Extensions SDK v1.0.0-beta.0 の API サーフェス調査（全 28 クラスのメンバー列挙・api 全体 grep, 2026-06-27）に基づく。
+Ableton Extensions SDK v1.0.0-beta.0 の API サーフェス調査（全 28 クラスのメンバー列挙・api 全体 grep, 2026-06-27）に基づく。v1.0.0-beta.1 でも `Resources` の公開メソッドは `importAudioFile` と `renderPreFxAudio` のままで、transport・ルーティング・freeze / flatten / resample / bounce は追加されていない（2026-09-20 に型定義を再確認）。
 
 - レンダリング手段は `Resources.renderPreFxAudio(track: AudioTrack, startTime, endTime): Promise<string>` のみ。対象は **AudioTrack 限定**で、アレンジメント上のオーディオクリップの **pre-FX 音声**をレンダリングする。
 - **存在しない**: transport（再生 / 録音 / 再生位置）、トラック入出力ルーティング、モニタリング、freeze / flatten / resample / bounce。
