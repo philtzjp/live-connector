@@ -6,6 +6,7 @@
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { AudioTrack } from "@ableton-extensions/sdk"
+import { runWithinTransaction } from "./fake-transaction"
 
 export type FakeClip = {
     name: string
@@ -155,9 +156,7 @@ export function createFakeLive(options: {
                 return file_path
             },
         },
-        withinTransaction<T>(fn: () => T) {
-            return fn()
-        },
+        withinTransaction: runWithinTransaction,
     }
 
     return { song, context, renderedPaths: rendered_paths }
