@@ -1,6 +1,6 @@
 {
     "name": "@live-connector/extension",
-    "version": "3.1.0",
+    "version": "3.1.1",
     "private": true,
     "type": "module",
     "main": "dist/extension.js",
@@ -13,7 +13,7 @@
         "start": "tsx build.ts && extensions-cli run"
     },
     "dependencies": {
-        "@ableton-extensions/sdk": "file:../../ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz",
+        "@ableton-extensions/sdk": "file:../../ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz",
         "@live-connector/cypher": "workspace:*",
         "@live-connector/env": "workspace:*",
         "@live-connector/error": "workspace:*",
@@ -28,7 +28,7 @@
         "zod": "^4.4.3"
     },
     "devDependencies": {
-        "@ableton-extensions/cli": "file:../../ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz",
+        "@ableton-extensions/cli": "file:../../ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz",
         "esbuild": "^0.28.1",
         "tsx": "^4.22.4",
         "vitest": "^4.1.9"

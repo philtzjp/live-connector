@@ -24,8 +24,8 @@ importers:
   apps/extension:
     dependencies:
       '@ableton-extensions/sdk':
-        specifier: file:../../ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz
-        version: file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz
+        specifier: file:../../ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz
+        version: file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz
       '@live-connector/cypher':
         specifier: workspace:*
         version: link:../../packages/cypher
@@ -64,8 +64,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@ableton-extensions/cli':
-        specifier: file:../../ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz
-        version: file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz
+        specifier: file:../../ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz
+        version: file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
@@ -109,16 +109,16 @@ importers:
 
 packages:
 
-  '@ableton-extensions/cli@file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-n1NiV11l3XFD+MrdYzFU6L4m0P5RFs+ObDXJHtik1o2LRjUX+PGHtyrNwlIancqz/3hPlC98sXdo300ZLkHjeA==, tarball: file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz}
-    version: 1.0.0-beta.0
-    engines: {node: '>=22.11.0'}
+  '@ableton-extensions/cli@file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz':
+    resolution: {integrity: sha512-6xgmcjOE9flINaHUSoWe4ucaWNrlfa+ioHwZeuz1Oa7dpMG+4M/JkhBOxHFadC2jsiO9aL7mwv2eabiNG/owcQ==, tarball: file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz}
+    version: 1.0.0-beta.1
+    engines: {node: '>=24.16.0'}
     hasBin: true
 
-  '@ableton-extensions/sdk@file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz':
-    resolution: {integrity: sha512-FVbIkRFh+UTIL1SclWbtPYrBetW65L3mnoiHVdxyGSmjuDO3XjY3hCIebYW/yJfXIroDtMnmZnIMO7T1YnM2+A==, tarball: file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz}
-    version: 1.0.0-beta.0
-    engines: {node: '>=22.11.0'}
+  '@ableton-extensions/sdk@file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz':
+    resolution: {integrity: sha512-v2BYXQrjZIw01lefwx+q6muUOA7YEGVBHtLPfimt6RATDsSgvl4HI5BGJqN8A6CQegPxPA46hKm9kVkJWZMdvQ==, tarball: file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz}
+    version: 1.0.0-beta.1
+    engines: {node: '>=24.16.0'}
 
   '@biomejs/biome@2.5.1':
     resolution: {integrity: sha512-IXWLCxKmae+rI7LOHS1B3EbVisQ6GRAWbhN9msa6KjNCyFWrvKZWR4oUdinaNssrV852OrSHuSPa95h1GPJc7Q==}
@@ -1495,7 +1495,7 @@ packages:
 
 snapshots:
 
-  '@ableton-extensions/cli@file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.0.tgz':
+  '@ableton-extensions/cli@file:ableton-sdk/ableton-extensions-cli-1.0.0-beta.1.tgz':
     dependencies:
       archiver: 7.0.1
     transitivePeerDependencies:
@@ -1503,7 +1503,7 @@ snapshots:
       - bare-buffer
       - react-native-b4a
 
-  '@ableton-extensions/sdk@file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.0.tgz': {}
+  '@ableton-extensions/sdk@file:ableton-sdk/ableton-extensions-sdk-1.0.0-beta.1.tgz': {}
 
   '@biomejs/biome@2.5.1':
     optionalDependencies:

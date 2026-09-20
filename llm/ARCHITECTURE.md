@@ -241,7 +241,7 @@ v3.0.0 で廃止。複数ノードへの `MATCH … SET` が単一トランザ�
 
 ## 巻き戻し（undo ログ）
 
-SDK v1.0.0-beta.0 には undo / redo を実行する API が無い（`ExtensionContext` はトランザクションの undoable 性を記述するのみ）。v3.0.0 ではスナップショット機構に代わり、**inverse diff 合成**による MCP 側 undo を提供する。
+SDK v1.0.0-beta.1 には undo / redo を実行する API が無い（`ExtensionContext` はトランザクションの undoable 性を記述するのみ）。v3.0.0 ではスナップショット機構に代わり、**inverse diff 合成**による MCP 側 undo を提供する。
 
 - 永続化: `environment.storageDirectory/undo/undo-log.jsonl`（JSONL、最大 200 件ローテーション）
 - 各書き込みは `writeId` と `inverse[]`（`set_properties` / `notes_replace` / `delete_created` / `recreate`）を記録
@@ -254,7 +254,7 @@ upstream（Ableton Extensions SDK）への undo / redo API 追加要望は本機
 
 ## upstream（Ableton Extensions SDK）への要望
 
-SDK v1.0.0-beta.0 に不足しており、本リポジトリが回避策・scope 縮小で代替している API の一覧。追加され次第、対応する代替を置き換える。
+SDK v1.0.0-beta.1 に不足しており、本リポジトリが回避策・scope 縮小で代替している API の一覧。追加され次第、対応する代替を置き換える。
 
 - **undo / redo API**: 上の「巻き戻し（undo ログ）」を参照。inverse diff 機構はこの欠如の代替である。
 - **MIDI トラックの render / freeze / resample API**: `llm/midi-audition.md` の「真の解決（upstream）」を参照。手動 resample 前提の置き換え。
