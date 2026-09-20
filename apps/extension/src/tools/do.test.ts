@@ -674,3 +674,105 @@ describe("row-cap unit", () => {
         expect(result.truncated).toBe(false)
     })
 })
+
+describe("preview bigint serialization", () => {
+    let storage_directory = "/tmp/live-connector-test"
+
+    beforeEach(() => {
+        clearRenderJobsForTest()
+        storage_directory = `/tmp/live-connector-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    })
+
+    /**
+     * Extensions SDK 1.0.0-beta.0 は Clip.color / Song.rootNote などのゲッターで
+     * 低レベル HostApi の bigint を変換せずに返していた。その状態を模すため、
+     * fixture のプロパティを bigint へ差し替える。
+     */
+    function makeBigintDeps(): ServerDeps {
+        const deps = makeDeps({}, storage_directory)
+        const song = deps.context.application.song as unknown as {
+            rootNote: number | bigint
+            scenes: { tempo?: number | bigint }[]
+        }
+        const track = songTrack(deps)
+        const clip = arrangementClip(track) as unknown as { color: number | bigint }
+        clip.color = 16711680n
+        song.rootNote = 0n
+        const scene = song.scenes[0]
+        if (scene !== undefined) {
+            scene.tempo = 120n
+        }
+        return deps
+    }
+
+    it("notes の SET を preview できる", async () => {
+        const deps = makeBigintDeps()
+        const server = await buildRegisteredServer(deps)
+        const result = await server.call("do", {
+            statement:
+                'MATCH (c:MidiClip {name:"Bass"}) SET c.notes = [{pitch:60,startTime:0,duration:1,velocity:100}]',
+            preview: true,
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        expect(json.status).toBe("preview")
+        const targets = json.targets as Record<string, unknown>[]
+        expect(targets[0]?.color).toBe(16711680)
+        expect(typeof targets[0]?.color).toBe("number")
+    })
+
+    it("Scene の COPY を preview できる", async () => {
+        const deps = makeBigintDeps()
+        const server = await buildRegisteredServer(deps)
+        const result = await server.call("do", {
+            statement: "MATCH (:Song)-[:HAS_SCENE]->(s:Scene {index:0}) COPY s",
+            preview: true,
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        expect(json.status).toBe("preview")
+        const targets = json.targets as Record<string, unknown>[]
+        expect(targets[0]?.tempo).toBe(120)
+        expect(typeof targets[0]?.index).toBe("number")
+    })
+
+    it("Scene の DELETE を preview できる", async () => {
+        const deps = makeBigintDeps()
+        const server = await buildRegisteredServer(deps)
+        const result = await server.call("do", {
+            statement: "MATCH (:Song)-[:HAS_SCENE]->(s:Scene {index:0}) DELETE s",
+            preview: true,
+        })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        expect(json.status).toBe("preview")
+        const targets = json.targets as Record<string, unknown>[]
+        expect(targets[0]?.tempo).toBe(120)
+        expect(json.undoable).toBe("full")
+    })
+
+    it("ノードを返す読み取りで bigint を数値として返す", async () => {
+        const deps = makeBigintDeps()
+        const server = await buildRegisteredServer(deps)
+        const result = await server.call("do", { statement: "MATCH (s:Song) RETURN s" })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        const rows = json.rows as Record<string, Record<string, unknown>>[]
+        expect(rows[0]?.s?.rootNote).toBe(0)
+    })
+
+    it("プロパティを返す読み取りで bigint を null へ落とさない", async () => {
+        const deps = makeBigintDeps()
+        const server = await buildRegisteredServer(deps)
+        const result = await server.call("do", { statement: "MATCH (s:Song) RETURN s.rootNote" })
+
+        const json = result.json as Record<string, unknown>
+        expect(result.isError).toBe(false)
+        const rows = json.rows as Record<string, unknown>[]
+        expect(rows[0]?.["s.rootNote"]).toBe(0)
+    })
+})

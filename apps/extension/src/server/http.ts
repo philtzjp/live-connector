@@ -6,6 +6,7 @@ import {
     NotFoundError,
     toProblemDetails,
 } from "@live-connector/error"
+import { stringifyJson } from "@live-connector/json"
 import type { Logger } from "@live-connector/log"
 import {
     StreamableHTTPServerTransport,
@@ -47,7 +48,7 @@ function writeJson(
     payload: unknown,
 ): void {
     response.writeHead(status_code, { "content-type": content_type })
-    response.end(JSON.stringify(payload))
+    response.end(stringifyJson(payload))
 }
 
 function writeProblem(
@@ -60,7 +61,7 @@ function writeProblem(
         "content-type": "application/problem+json",
         ...extra_headers,
     })
-    response.end(JSON.stringify(problem))
+    response.end(stringifyJson(problem))
 }
 
 function requestPath(request: IncomingMessage, env: Env): string {

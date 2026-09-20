@@ -1,11 +1,13 @@
 /** MCP ツール応答の共通型とヘルパ。 */
 
+import { stringifyJson } from "@live-connector/json"
+
 export type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean }
 
 export type UndoableLevel = "full" | "partial" | "none"
 
 export function textResult(payload: unknown, isError = false): ToolResult {
-    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }], isError }
+    return { content: [{ type: "text", text: stringifyJson(payload, 2) }], isError }
 }
 
 export function nextWriteId(counter: { value: number }): string {

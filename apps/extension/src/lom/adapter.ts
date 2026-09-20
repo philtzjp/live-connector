@@ -25,6 +25,7 @@ import {
 } from "@ableton-extensions/sdk"
 import type { GraphAdapter, ScalarValue } from "@live-connector/cypher"
 import { BadRequestError } from "@live-connector/error"
+import { bigintToJsonValue } from "@live-connector/json"
 import {
     isSubtypeOf,
     LOM_SCHEMA,
@@ -399,6 +400,11 @@ export class LomGraphAdapter implements GraphAdapter<LomNode> {
             typeof raw === "boolean"
         ) {
             return raw
+        }
+        // SDK が bigint を返すプロパティ（Handle.id 由来の値など）は数値へ正規化する。
+        // null へ落とすと値そのものが失われるため、直列化と同じ規則で変換する。
+        if (typeof raw === "bigint") {
+            return bigintToJsonValue(raw)
         }
         return null
     }

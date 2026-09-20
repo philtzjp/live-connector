@@ -17,7 +17,7 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 
 ## インストール
 
-1. `live-connector-3.1.1.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
+1. `live-connector-3.1.2.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -32,7 +32,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"3.1.1","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
+{"status":"pass","version":"3.1.2","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
 ```
 
 ## Claude Code で使う
@@ -144,7 +144,7 @@ pnpm lint        # Biome によるリント
 pnpm format      # Biome によるフォーマット
 ```
 
-`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / parseStatement）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによる meta / do / undo / render ツール層）を検証します。
+`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / parseStatement）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`packages/json`（`bigint` を含む値の JSON 直列化）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによる meta / do / undo / render ツール層）を検証します。
 
 ### git hook
 

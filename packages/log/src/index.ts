@@ -5,6 +5,8 @@
  * 構造化フィールドを 1 行 JSON として付随させる。
  */
 
+import { stringifyJson } from "@live-connector/json"
+
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
 export type LogFields = Record<string, unknown>
@@ -28,7 +30,7 @@ function formatLine(scope: string, level: LogLevel, message: string, fields?: Lo
     if (fields === undefined || Object.keys(fields).length === 0) {
         return head
     }
-    return `${head} ${JSON.stringify(fields)}`
+    return `${head} ${stringifyJson(fields)}`
 }
 
 /**
