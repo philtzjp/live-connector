@@ -17,7 +17,7 @@ live-connector は、Ableton Live を AI エージェントから操作するた
 
 ## インストール
 
-1. `live-connector-3.1.2.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
+1. `live-connector-3.2.0.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
 2. Ableton Live を起動し、Preferences → Extensions を開きます。
 3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
 4. Developer Mode を OFF にします。
@@ -32,7 +32,7 @@ Live 起動後、ブラウザで次の URL を開きます。
 ページに次のような JSON が表示されれば、live-connector は起動しています。
 
 ```json
-{"status":"pass","version":"3.1.2","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
+{"status":"pass","version":"3.2.0","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
 ```
 
 ## Claude Code で使う
@@ -72,6 +72,12 @@ MATCH (t:Track {name:"Drums"}) SET t.mute = true
 ```cypher
 CREATE (t:MidiTrack {name:"Bass"})
 ```
+
+```cypher
+MATCH (t:MidiTrack {name:"Bass"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})
+```
+
+内蔵デバイスの挿入は `index` を省略するとデバイスチェーンの末尾へ挿入します。Rack のチェーン内へ挿入する場合は `MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain)` をアンカーにします。読み込めるのは Live の内蔵デバイスのみで、サードパーティ製プラグインは SDK 上扱えません。
 
 ## Transport の操作（AbletonOSC）
 

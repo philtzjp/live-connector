@@ -76,6 +76,7 @@ source_files:
         - "packages/env/src/index.ts"
         - "packages/error/src/index.ts"
         - "packages/log/src/index.ts"
+        - "packages/json/src/index.ts"
 
 enums:
     property_type:
@@ -433,6 +434,27 @@ models:
           - name: "metadata"
             type: "McpErrorMetadata"
             required: false
+
+    - name: "bigintToJsonValue"
+      kind: "function"
+      source: "packages/json/src/index.ts"
+      owner_package: "@live-connector/json"
+      signature: "(value: bigint) => number | string"
+      note: "安全整数の範囲内は number、範囲外は精度を保つため 10 進文字列"
+
+    - name: "jsonReplacer"
+      kind: "function"
+      source: "packages/json/src/index.ts"
+      owner_package: "@live-connector/json"
+      signature: "(key: string, value: unknown) => unknown"
+      note: "JSON.stringify の replacer。bigint のみ変換する"
+
+    - name: "stringifyJson"
+      kind: "function"
+      source: "packages/json/src/index.ts"
+      owner_package: "@live-connector/json"
+      signature: "(value: unknown, space?: number) => string"
+      note: "応答・ログ・永続化の直列化はこの関数を経由する"
 
     - name: "Logger"
       kind: "service_interface"
@@ -1665,6 +1687,7 @@ lom_graph:
         - { type: "HAS_PAN", from: "Mixer", to: "Parameter", array: false }
         - { type: "HAS_SEND", from: "Mixer", to: "Parameter", array: true }
         - { type: "HAS_DEVICE", from: "Track", to: "Device", array: true }
+        - { type: "HAS_DEVICE", from: "Chain", to: "Device", array: true }
         - { type: "HAS_CLIPSLOT", from: "Track", to: "ClipSlot", array: true }
         - { type: "HAS_CLIP", from: "ClipSlot", to: "Clip", array: false }
         - { type: "HAS_ARRANGEMENT_CLIP", from: "Track", to: "Clip", array: true }
@@ -1738,6 +1761,7 @@ cypher_contract:
             - "CREATE (s:Scene {index?, name?})"
             - "CREATE (c:CuePoint {time, name?})"
             - "MATCH (t:Track) CREATE (t)-[:HAS_DEVICE]->(d:Device {name, index?})"
+            - "MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain) CREATE (ch)-[:HAS_DEVICE]->(d:Device {name, index?})"
             - "MATCH (s:ClipSlot) CREATE (s)-[:HAS_CLIP]->(c:MidiClip {length}) | (c:AudioClip {filePath})"
             - "MATCH (t:Track) CREATE (t)-[:HAS_ARRANGEMENT_CLIP]->(c:MidiClip|AudioClip {startTime, duration, ...})"
             - "MATCH (c:MidiClip) CREATE (c)-[:HAS_NOTE]->(n:Note {pitch, startTime, duration, velocity?})"
