@@ -1,169 +1,320 @@
-# philtzjp/live-connector
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/philtz-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/philtz.png">
+  <img src="docs/assets/philtz-outline.png" width="96" alt="Philtz">
+</picture>
 
-<img src="https://github.com/philtzjp/.github/blob/main/images/philtz.png?raw=true" width="150px" alt="Philtz Logo">
+# live-connector
 
-live-connector は、Ableton Live を AI エージェントから操作するための MCP サーバーです。
+An MCP server that lets AI agents read and write an Ableton Live Set as a graph.<br>
+<sub>Ableton Live の Live Set を、AI エージェントがグラフとして読み書きできるようにする MCP サーバーです。</sub>
 
-配布済みの `.ablx` を Ableton Live にインストールすると、Live 起動時に `http://127.0.0.1:7799/api/v1/mcp` で MCP endpoint が起動します。Claude Code などの MCP クライアントから、Live Set のトラック、クリップ、デバイス、MIDI ノート、デバイスパラメータを読み書きできます。
+<p align="center"><a href="#en">Read more in English</a> · <a href="#ja">日本語で読む</a></p>
 
-> live-connector is an MCP server for controlling Ableton Live from AI agents. Install the `.ablx` file, restart Live, and connect your MCP client to `http://127.0.0.1:7799/api/v1/mcp`.
+<a id="en"></a>
 
-## 必要なもの
+## English
 
-- Ableton Live（Extensions 対応の Beta ビルド）
-- 本リポジトリの `.ablx`（[Releases](https://github.com/philtzjp/live-connector/releases) から取得、または `pnpm package` で生成）
-- Claude Code などの HTTP MCP クライアント
-- （任意）Main 出力の実時間録音を使う場合は AbletonOSC を Remote Script として導入
+<p align="center">
+  <a href="https://github.com/philtzjp/live-connector"><img src="https://img.shields.io/github/stars/philtzjp/live-connector?style=social" alt="Star live-connector on GitHub"></a><br>
+  <sub>If live-connector helps you, a star keeps us going.</sub>
+</p>
 
-## インストール
+> [!IMPORTANT]
+> live-connector is early-stage software built on Ableton Extensions SDK 1.0.0-beta.1, and it requires a Live Beta build with Extensions support. If you are upgrading from v2.x, note that v3.0.0 consolidated the MCP surface into four tools and removed every v2.x tool name.
 
-1. `live-connector-3.2.1.ablx` を用意します（Releases からダウンロード、またはリポジトリで `pnpm package` を実行）。
-2. Ableton Live を起動し、Preferences → Extensions を開きます。
-3. `Choose file` から `.ablx` を選択、または `.ablx` を Extensions ページへドロップします。
-4. Developer Mode を OFF にします。
-5. Ableton Live を再起動します。
+### Quick start
 
-![Ableton Live Extensions settings showing where to select the .ablx file and turn Developer Mode off](docs/assets/settings-instructions.png)
+1. Get the `.ablx`. [Releases](https://github.com/philtzjp/live-connector/releases) has pre-releases up to v3.0.0. For the latest 3.2.1, run `pnpm package` in the repository; it writes the file to `apps/extension/dist/`.
+2. In Live, open Preferences → Extensions and choose the `.ablx`, or drop it onto the page.
+3. Turn Developer Mode OFF and restart Live.
 
-Live 起動後、ブラウザで次の URL を開きます。
+![Ableton Live Extensions settings showing where to select the .ablx file and the Developer Mode switch](docs/assets/settings-instructions.png)
 
-<http://127.0.0.1:7799/health>
-
-ページに次のような JSON が表示されれば、live-connector は起動しています。
-
-```json
-{"status":"pass","version":"3.2.1","description":"live-connector MCP server","tools":{ ... },"structure":{ ... }}
-```
-
-## Claude Code で使う
-
-初回のみ、プロジェクトルートで MCP server を登録します。
+4. Check that it is running, and register it with Claude Code.
 
 ```sh
+curl http://127.0.0.1:7799/health
 claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp --scope project
 ```
 
-登録後に Claude Code を再起動します。URL が変わらない限り、`.ablx` の再インストールや Live 再起動のたびに再登録する必要はありません。
+> [!CAUTION]
+> The MCP server has no authentication. Do not forward port 7799 to other hosts, and keep AbletonOSC off your LAN.
 
-## できること
+If `/health` returns `{"status":"pass","version":"3.2.1",...}`, the server is up.
 
-v3.0.0 では MCP ツールが 4 つに統合されています。推奨フローは **meta → do read → do write → render → undo** です。
+> [!TIP]
+> You only need to register the MCP server once. Reinstalling the `.ablx` keeps the same URL.
 
-| 動詞 | ツール | できること |
-| --- | --- | --- |
-| 入口 | `meta` | サービス情報、LOM スキーマ、Cypher 文法契約、CALL 手続き、capabilities、例文、Live Set overview |
-| 見る・変える | `do` | Cypher で読み取り（MATCH … RETURN）と書き込み（SET / CREATE / DELETE / COPY）、Transport 手続き（CALL） |
-| 聴く | `render` | AudioTrack の Pre-FX レンダリング、または Main 出力の実時間録音（`source:"main"`） |
-| 戻す | `undo` | do 書き込みの取り消し（LIFO）。履歴は `do` read の `WriteEvent` 仮想ラベルで照会 |
+Restart Claude Code, open a Live Set, and try asking:
 
-読み取り例:
+- "List the tracks and devices in this Live Set."
+- "Create a MIDI track called Bass and add Wavetable to it."
+- "Mute the Drums track. Actually, undo that."
+- "What is the current value and range of Operator's Cutoff?"
+
+### Technology
+
+<details>
+<summary>The Live Set is a graph</summary>
+<br>
+
+Tracks, devices, parameters and clips are exposed as nodes and relationships, and agents read and write them with the same Cypher.
 
 ```cypher
 MATCH (:Track {name:"Drums"})-[:HAS_DEVICE]->(:Device {name:"Operator"})-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"})
 RETURN p.value, p.min, p.max
 ```
 
-書き込み例:
-
 ```cypher
-MATCH (t:Track {name:"Drums"}) SET t.mute = true
+MATCH (t:MidiTrack {name:"Bass"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})
 ```
 
+| Live | Graph |
+| --- | --- |
+| Track | `Track` node, with `MidiTrack` and `AudioTrack` as subtypes |
+| Device on a track | `(:Track)-[:HAS_DEVICE]->(:Device)` |
+| Device parameter | `(:Device)-[:HAS_PARAM]->(:Parameter)` |
+| Mixer volume, pan and sends | `(:Track)-[:HAS_MIXER]->(:Mixer)-[:HAS_VOLUME\|HAS_PAN\|HAS_SEND]->(:Parameter)` |
+| Rack chain | `(:Device)-[:HAS_CHAIN]->(:Chain)` |
+| Playback state | virtual label `Transport` |
+| Write history | virtual label `WriteEvent` |
+| Capture job | virtual label `RenderJob` |
+
+`meta` returns the complete list of labels and the grammar at runtime.
+
+</details>
+
+<details>
+<summary>It runs inside Live</summary>
+<br>
+
+live-connector is a Live Extension, so there is no Remote Script or separate process to set up. The MCP server starts with Live and serves Streamable HTTP on a loopback address.
+
+</details>
+
+<details>
+<summary>Every write can be undone</summary>
+<br>
+
+The SDK has no undo API, so live-connector records the operations that reverse each `do` write under a `writeId`. `undo` applies them newest first, or for a specific `writeId`. Each write is marked `full`, `partial` or `none` depending on how completely it can be restored; `partial` and `none` require confirmation. Query the history with `MATCH (e:WriteEvent) RETURN e`.
+
+The log is kept as JSONL in the Extension's storage directory, up to 200 entries. When the SDK gains an undo API, this mechanism will be replaced.
+
+</details>
+
+<details>
+<summary>SDK and OSC, each for what it does best</summary>
+<br>
+
+Set editing goes through the SDK. Transport control and Main output capture go through AbletonOSC, because the SDK has no API for them. OSC writes are read back to confirm they took effect, and a failed write is never retried automatically on the other backend.
+
+Main output capture records the finished signal, including MIDI instruments and the devices on Main, by recording the Resampling input in real time. Pass `source:"main"` to `render` and go through two steps.
+
+```json
+{"source":"main","startTime":0,"endTime":64,"preview":true}
+```
+
+```json
+{"source":"main","startTime":0,"endTime":64,"background":true,"confirm":true,"planId":"plan-...","requestId":"capture-001"}
+```
+
+`startTime` and `endTime` are zero-based quarter-note beats. During capture a temporary track is created and loop, punch and record mode are changed, then everything is restored. Other writes, `undo`, and another `render` are rejected until it finishes. Check progress with `MATCH (j:RenderJob {id:"..."}) RETURN j.phase, j.progressFraction`.
+
+</details>
+
+### Specification
+
+<details>
+<summary>MCP tools</summary>
+<br>
+
+| Tool | Purpose |
+| --- | --- |
+| `meta` | Service info, LOM schema, Cypher grammar, allowed `CALL` procedures, examples, and a Live Set overview |
+| `do` | Cypher reads and writes, and `CALL` for transport |
+| `render` | Pre-FX rendering of an AudioTrack, or real-time capture of the Main output |
+| `undo` | Reverts `do` writes |
+
+The recommended flow is `meta`, then `do` reads, `do` writes, `render`, and `undo` when needed.
+
+</details>
+
+<details>
+<summary>Cypher</summary>
+<br>
+
+| Kind | Supported |
+| --- | --- |
+| Read | `MATCH … RETURN` with projection, aggregation, `ORDER BY`, `SKIP` and `LIMIT`. Results are truncated at 500 rows without `LIMIT` |
+| Write | `SET`, `CREATE`, `DELETE`, `COPY` |
+| Pattern | Directed relationships, variable-length hops, basic comparison operators |
+| Procedure | `CALL transport.play()`, `transport.seek()`, `render.cancel()` and others listed by `meta` |
+
+</details>
+
+<details>
+<summary>Endpoints and settings</summary>
+<br>
+
+| Item | Value |
+| --- | --- |
+| MCP endpoint | `http://127.0.0.1:7799/api/v1/mcp`, Streamable HTTP |
+| Health check | `http://127.0.0.1:7799/health` |
+| Enable AbletonOSC | `LIVE_CONNECTOR_OSC_ENABLED=true`. Off by default; everything else works without it |
+
+</details>
+
+<a id="ja"></a>
+
+## 日本語
+
+<p align="center">
+  <a href="https://github.com/philtzjp/live-connector"><img src="https://img.shields.io/github/stars/philtzjp/live-connector?style=social" alt="Star live-connector on GitHub"></a><br>
+  <sub>live-connector が役に立ったら、スターを付けてもらえると励みになります。</sub>
+</p>
+
+> [!IMPORTANT]
+> live-connector は Ableton Extensions SDK 1.0.0-beta.1 の上で動く早期段階のソフトウェアで、Extensions に対応した Live の Beta ビルドが必要です。v2.x から更新する場合は注意してください。v3.0.0 で MCP ツールを 4 つに統合し、v2.x のツール名はすべて廃止しました。
+
+### クイックスタート
+
+1. `.ablx` を用意します。[Releases](https://github.com/philtzjp/live-connector/releases) には v3.0.0 までの pre-release があります。最新の 3.2.1 はリポジトリで `pnpm package` を実行すると `apps/extension/dist/` に生成されます。
+2. Live の Preferences → Extensions で `.ablx` を選ぶか、ページにドロップします。
+3. Developer Mode を OFF にして Live を再起動します。
+
+![Ableton Live の Extensions 設定。.ablx を選ぶ場所と Developer Mode のスイッチ](docs/assets/settings-instructions.png)
+
+4. 起動を確認し、Claude Code に登録します。
+
+```sh
+curl http://127.0.0.1:7799/health
+claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp --scope project
+```
+
+> [!CAUTION]
+> MCP サーバーに認証はありません。7799 番ポートを他のホストへ転送せず、AbletonOSC も LAN に公開しないでください。
+
+`/health` が `{"status":"pass","version":"3.2.1",...}` を返せば起動しています。
+
+> [!TIP]
+> MCP の登録は初回だけで済みます。`.ablx` を入れ直しても URL は変わらないので、再登録は要りません。
+
+Claude Code を再起動し、Live Set を開いた状態で次のように頼んでみてください。
+
+- 「今の Live Set のトラックとデバイスを一覧にして」
+- 「Bass という MIDI トラックを作って Wavetable を挿して」
+- 「Drums トラックをミュートして。やっぱり戻して」
+- 「Operator の Cutoff の現在値と範囲を教えて」
+
+### テクノロジー
+
+<details>
+<summary>Live Set をグラフとして扱います</summary>
+<br>
+
+トラック、デバイス、パラメータ、クリップをノードと関係として公開し、エージェントは読み取りも書き込みも同じ Cypher で行います。
+
 ```cypher
-CREATE (t:MidiTrack {name:"Bass"})
+MATCH (:Track {name:"Drums"})-[:HAS_DEVICE]->(:Device {name:"Operator"})-[:HAS_PARAM]->(p:Parameter {name:"Cutoff"})
+RETURN p.value, p.min, p.max
 ```
 
 ```cypher
 MATCH (t:MidiTrack {name:"Bass"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})
 ```
 
-内蔵デバイスの挿入は `index` を省略するとデバイスチェーンの末尾へ挿入します。Rack のチェーン内へ挿入する場合は `MATCH (:Device)-[:HAS_CHAIN]->(ch:Chain)` をアンカーにします。読み込めるのは Live の内蔵デバイスのみで、サードパーティ製プラグインは SDK 上扱えません。
+| Live | グラフ |
+| --- | --- |
+| トラック | `Track` ノード。`MidiTrack` と `AudioTrack` はそのサブタイプです |
+| トラック上のデバイス | `(:Track)-[:HAS_DEVICE]->(:Device)` |
+| デバイスのパラメータ | `(:Device)-[:HAS_PARAM]->(:Parameter)` |
+| ミキサーの音量、パン、センド | `(:Track)-[:HAS_MIXER]->(:Mixer)-[:HAS_VOLUME\|HAS_PAN\|HAS_SEND]->(:Parameter)` |
+| Rack のチェーン | `(:Device)-[:HAS_CHAIN]->(:Chain)` |
+| 再生状態 | 仮想ラベル `Transport` |
+| 書き込み履歴 | 仮想ラベル `WriteEvent` |
+| 録音ジョブ | 仮想ラベル `RenderJob` |
 
-## Transport の操作（AbletonOSC）
+ラベルの完全な一覧と文法は、実行時に `meta` が返します。
 
-`do` の限定 `CALL` で再生・停止・シークと録音ジョブの中断を要求できます。許可手続きとリテラル引数のみを受理し、`confirm:true` が必要です。`preview:true` は OSC 送信を含め副作用がありません。
+</details>
 
-```cypher
-CALL transport.seek(32)
-```
+<details>
+<summary>Live の中で動きます</summary>
+<br>
 
-```cypher
-CALL transport.play()
-```
+live-connector は Live の Extension なので、Remote Script や別プロセスを用意する必要はありません。MCP サーバーは Live と一緒に起動し、loopback アドレスで Streamable HTTP の接続を受け付けます。
 
-```cypher
-CALL render.cancel("render-xxxxx")
-```
+</details>
 
-Transport の状態は仮想ラベル `Transport` で読み取ります（AbletonOSC 未接続時は 0 行）。
+<details>
+<summary>すべての書き込みを取り消せます</summary>
+<br>
 
-```cypher
-MATCH (t:Transport) RETURN t.isPlaying, t.currentSongTime, t.tempo
-```
+SDK には undo の API がないため、`do` の書き込みごとに、それを打ち消す操作を `writeId` と一緒に記録します。`undo` は記録を新しいものから順に、または `writeId` を指定して適用します。書き込みは、元に戻せる度合いに応じて `full`、`partial`、`none` のどれかに分類され、`partial` と `none` の取り消しには確認が必要です。履歴は `MATCH (e:WriteEvent) RETURN e` で確認できます。
 
-これらを使うには AbletonOSC を Remote Script として導入し、`LIVE_CONNECTOR_OSC_ENABLED=true` を設定します（既定は無効）。OSC を使わなくても他の機能は動作します。
+記録は Extension の保存領域に JSONL で最大 200 件まで残ります。SDK に undo の API が追加されたら、この仕組みを置き換える予定です。
 
-## Main 出力の録音（Hybrid）
+</details>
 
-MIDI 楽器の実音や Main 上の EQ / Compressor / Limiter を通した完成信号を、Resampling 入力の実時間録音で取得します。`render` に `source:"main"` を渡します。
+<details>
+<summary>SDK と OSC を得意分野で使い分けます</summary>
+<br>
 
-1. まず実行計画を取得します（録音やトラック作成はしません）。
+Set の編集は SDK で行います。再生の操作と Main 出力の録音は、SDK に API がないため AbletonOSC で行います。OSC での書き込みは読み戻して反映を確かめ、失敗した書き込みをもう一方の経路で自動的にやり直すことはしません。
+
+Main 出力の録音では、MIDI 楽器の実音や、Main 上のデバイスを通した完成形の音を、Resampling 入力の実時間録音で取得します。`render` に `source:"main"` を渡し、計画の取得と実行の 2 段階で進めます。
 
 ```json
 {"source":"main","startTime":0,"endTime":64,"preview":true}
 ```
 
-2. 返ってきた `planId` を使い、`requestId` と `confirm:true` を付けて実行します。実時間再生のため常に background ジョブです。
-
 ```json
 {"source":"main","startTime":0,"endTime":64,"background":true,"confirm":true,"planId":"plan-...","requestId":"capture-001"}
 ```
 
-3. 進捗と結果は `RenderJob` 仮想ラベルで照会します。
+`startTime` と `endTime` は 0 始まりの四分音符の拍数です。録音中は一時トラックを作り、loop、punch、record mode を一時的に変更し、終了後に元へ戻します。録音が終わるまで、ほかの書き込み、`undo`、別の `render` は受け付けません。進捗は `MATCH (j:RenderJob {id:"..."}) RETURN j.phase, j.progressFraction` で確認します。
 
-```cypher
-MATCH (j:RenderJob {id:"render-xxxxx"}) RETURN j.phase, j.progressFraction, j.audioStatus, j.cleanupStatus, j.filePath
-```
+</details>
 
-`startTime` / `endTime` は 0 始まりの四分音符拍です（4/4 で 0〜64 拍は 16 小節）。録音は一時 AudioTrack を作成し loop / punch / record_mode を一時変更し、終了後に復旧して一時トラックを削除します。録音中は他の書き込み・undo・別 render を実行しないでください。
+### 仕様
 
-## 注意点
+<details>
+<summary>MCP ツール</summary>
+<br>
 
-- インストール済み `.ablx` を使う場合、Developer Mode は OFF にします。
-- `localhost:7799` が起動しない場合は、Ableton Live を再起動し、`/health` を確認してください。
-- v3.0.0 は **破壊的変更**です。v2.x の個別ツール名（`query` / `set_track` / `render_audio` 等）は存在しません。
-- Ableton Extensions SDK v1.0.0-beta.1 には Browser API がないため、`.adv` / `.adg` / third-party plug-in のネイティブプリセットを Live へ直接読み込むことはできません。
-- third-party plug-in の非公開内部状態や波形選択は保存・復元できません。デバイスパラメータの保存・復元は `do` read で Parameter 値を取得し、`do` SET で再適用してください（旧 `save_device_state` / `apply_device_state` は廃止）。
-- SDK には MIDI 楽器トラックの合成出力を audio 化する手段がありません。`render` の `select` モードは AudioTrack の pre-FX 音声のみ対象です。MIDI 楽器の実音や Main のデバイスを通した完成信号は、`render` の `source:"main"`（AbletonOSC 必須）で Main 出力を実時間録音して取得します。個別の MIDI トラックを audio 化する従来手順は `llm/midi-audition.md` を参照してください。
-- Main 録音は実時間で行われ、CPU 不足やドロップアウトの影響を受け得ます。テンポ変化・外部入力依存・無人運用は対応範囲外です。
-- OSC を含む録音経路は実機検証が前提です。`meta` の `runtime.validationLevel` が `unverified` の間は実験的機能として扱ってください。
-- AbletonOSC の OSC server は既定で `0.0.0.0` に bind し得ます。Remote Script の loopback bind 設定または OS firewall で UDP 受信を制限し、無認証 OSC を LAN へ公開しないでください。
+| ツール | 役割 |
+| --- | --- |
+| `meta` | サービス情報、LOM スキーマ、Cypher の文法、使える `CALL` 手続き、例文、Live Set の概要を返します |
+| `do` | Cypher で読み書きし、再生操作の `CALL` を実行します |
+| `render` | AudioTrack を Pre-FX でレンダリングするか、Main 出力を実時間で録音します |
+| `undo` | `do` の書き込みを取り消します |
 
-## 開発
+推奨する順序は、`meta`、`do` での読み取り、`do` での書き込み、`render` です。必要なら最後に `undo` で戻します。
 
-モノレポは pnpm + Turborepo で管理します。主なコマンド:
+</details>
 
-```sh
-pnpm typecheck   # 全パッケージの型チェック
-pnpm test        # vitest によるユニットテスト（実機・Ableton SDK 実体なしで完走）
-pnpm lint        # Biome によるリント
-pnpm format      # Biome によるフォーマット
-```
+<details>
+<summary>Cypher</summary>
+<br>
 
-`pnpm test` は `packages/cypher`（tokenizer / parser / evaluator / parseStatement）、`packages/lom-schema`（ラベル継承・サブタイプ判定）、`packages/json`（`bigint` を含む値の JSON 直列化）、`apps/extension`（フェイク SDK とフェイク MCP サーバーによる meta / do / undo / render ツール層）を検証します。
+| 種類 | 対応範囲 |
+| --- | --- |
+| 読み取り | `MATCH … RETURN`。射影、集計、`ORDER BY`、`SKIP`、`LIMIT` に対応します。`LIMIT` を省くと 500 行で打ち切ります |
+| 書き込み | `SET`、`CREATE`、`DELETE`、`COPY` |
+| パターン | 向きのある関係、可変長の hop、基本的な比較演算 |
+| 手続き | `CALL transport.play()`、`transport.seek()`、`render.cancel()` など。一覧は `meta` が返します |
 
-### git hook
+</details>
 
-git hook は `.vite-hooks/` にコミットしてあります。clone したら次を一度実行して有効化してください。`core.hooksPath` は `.git/config` に書かれるローカル設定なので、作業環境を作るたびに実行します。
+<details>
+<summary>エンドポイントと設定</summary>
+<br>
 
-```sh
-git config core.hooksPath .vite-hooks
-```
+| 項目 | 値 |
+| --- | --- |
+| MCP エンドポイント | `http://127.0.0.1:7799/api/v1/mcp`。Streamable HTTP で接続します |
+| ヘルスチェック | `http://127.0.0.1:7799/health` |
+| AbletonOSC の有効化 | `LIVE_CONNECTOR_OSC_ENABLED=true`。既定では無効で、使わなくてもほかの機能は動きます |
 
-`commit-msg` はコミットメッセージの形式を、`pre-commit` は `.env*` が dotenvx で暗号化されていることを検査します。`pre-push` は `pnpm typecheck` と `pnpm test` を実行します。
-
-## ライセンス
-
-本リポジトリの自作コード・ドキュメント・アセットは [MIT](./LICENSE) です。
-
-Ableton Extensions SDK は Ableton AG の第三者コンポーネントであり、本リポジトリには同梱していません。詳細は [NOTICE](./NOTICE) を参照してください。
+</details>
