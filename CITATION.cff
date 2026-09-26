@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use live-connector in your work, please cite it as below."
+type: software
+title: live-connector
+abstract: >-
+  An MCP server that runs inside Ableton Live as an Extension and lets
+  AI agents read and write the Live Set as a property graph with Cypher.
+authors:
+  - family-names: Ouchi
+    given-names: Arata
+    affiliation: Philtz
+version: 3.2.1
+license: MIT
+repository-code: "https://github.com/philtzjp/live-connector"
+url: "https://www.philtz.com"
+keywords:
+  - Ableton Live
+  - MCP
+  - Model Context Protocol
+  - AI agents
+  - Cypher
+  - music production
