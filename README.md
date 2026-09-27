@@ -25,7 +25,7 @@ An MCP server that lets AI agents read and write an Ableton Live Set as a graph.
 
 ### Quick start
 
-1. Get the `.ablx`. [Releases](https://github.com/philtzjp/live-connector/releases) has pre-releases up to v3.0.0. For the latest 3.2.1, run `pnpm package` in the repository; it writes the file to `apps/extension/dist/`.
+1. Get the `.ablx`. Download `live-connector-3.2.2.ablx` from [Releases](https://github.com/philtzjp/live-connector/releases), or run `pnpm package` in the repository; it writes the file to `apps/extension/dist/`.
 2. In Live, open Preferences → Extensions and choose the `.ablx`, or drop it onto the page.
 3. Turn Developer Mode OFF and restart Live.
 
@@ -41,7 +41,7 @@ claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp 
 > [!CAUTION]
 > The MCP server has no authentication. Do not forward port 7799 to other hosts, and keep AbletonOSC off your LAN.
 
-If `/health` returns `{"status":"pass","version":"3.2.1",...}`, the server is up.
+If `/health` returns `{"status":"pass","version":"3.2.2",...}`, the server is up.
 
 > [!TIP]
 > You only need to register the MCP server once. Reinstalling the `.ablx` keeps the same URL.
@@ -179,7 +179,7 @@ The recommended flow is `meta`, then `do` reads, `do` writes, `render`, and `und
 
 ### クイックスタート
 
-1. `.ablx` を用意します。[Releases](https://github.com/philtzjp/live-connector/releases) には v3.0.0 までの pre-release があります。最新の 3.2.1 はリポジトリで `pnpm package` を実行すると `apps/extension/dist/` に生成されます。
+1. `.ablx` を用意します。[Releases](https://github.com/philtzjp/live-connector/releases) から `live-connector-3.2.2.ablx` をダウンロードするか、リポジトリで `pnpm package` を実行すると `apps/extension/dist/` に生成されます。
 2. Live の Preferences → Extensions で `.ablx` を選ぶか、ページにドロップします。
 3. Developer Mode を OFF にして Live を再起動します。
 
@@ -195,7 +195,7 @@ claude mcp add --transport http live-connector http://127.0.0.1:7799/api/v1/mcp 
 > [!CAUTION]
 > MCP サーバーに認証はありません。7799 番ポートを他のホストへ転送せず、AbletonOSC も LAN に公開しないでください。
 
-`/health` が `{"status":"pass","version":"3.2.1",...}` を返せば起動しています。
+`/health` が `{"status":"pass","version":"3.2.2",...}` を返せば起動しています。
 
 > [!TIP]
 > MCP の登録は初回だけで済みます。`.ablx` を入れ直しても URL は変わらないので、再登録は要りません。

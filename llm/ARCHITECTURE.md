@@ -119,6 +119,7 @@ sequenceDiagram
 
     live->>host: auto-load installed .ablx on startup
     host->>extension: activate(ActivationContext)
+    extension->>extension: installCrashGuard(log)
     extension->>live: initialize(activation, API_VERSION)
     extension->>env: loadEnv(process.env)
     env-->>extension: Env
@@ -129,7 +130,9 @@ sequenceDiagram
     http->>mcp: createMcpServer(deps) per request
 ```
 
-`activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。activation 単位の `HybridRuntime` を生成して OSC を起動し、同じ `runtime` を `ServerDeps` として HTTP サーバーへ渡す。OSC 接続に失敗しても `start()` は例外を投げず、理由を capabilities へ残す（SDK 機能は動作継続）。`loadEnv()` は loopback host と port、OSC host / port、録音上限を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
+`activate()` は最初に `installCrashGuard()`（`apps/extension/src/runtime/crash-guard.ts`）で `uncaughtException` と `unhandledRejection` を記録して封じ込める。SDK は応答処理のコールバック内から `getObjectIsOfClass` を呼び、Live 側で対象を失った Handle に対して `TypeError: Invalid object reference` を投げる。これは非同期コールバックの内側で発生するため呼び出し側の try/catch では捕まえられず、Extension Host のプロセスごと終了させて同じホストに相乗りしている他の Extension も止める（#151）。Node.js 一般の作法としては `uncaughtException` を握って継続するのは推奨されないが、Extension Host は共有プロセスであり、1 つの無効な Handle で全体を落とす方が失うものが大きい。無効化された Handle が参照される根本原因は SDK 側の Handle キャッシュにあり、本リポジトリからは解消できない。
+
+その後 `activate()` は Ableton SDK の `initialize()` で `ExtensionContext` を得る。activation 単位の `HybridRuntime` を生成して OSC を起動し、同じ `runtime` を `ServerDeps` として HTTP サーバーへ渡す。OSC 接続に失敗しても `start()` は例外を投げず、理由を capabilities へ残す（SDK 機能は動作継続）。`loadEnv()` は loopback host と port、OSC host / port、録音上限を検証し、`startMcpHttpServer()` は `/health` と `/api/v1/mcp` を公開する。`/api/v1/mcp` は Host header が loopback host と設定 port に一致し、Origin header が存在する場合は loopback origin であるリクエストのみ受け付ける。
 
 ## 運用モード
 
@@ -281,6 +284,7 @@ SDK v1.0.0-beta.1 に不足しており、本リポジトリが回避策・scope
 - **トラック生成の挿入位置引数**: `Song.createMidiTrack()` / `Song.createAudioTrack()` は挿入位置（index）を受け取らず、生成位置は「最後に選択されたトラックの直後（未選択なら末尾）」に固定される。`do` CREATE Track はこの制約により挿入位置指定を提供できない。
 - **選択状態（selection）の読み取り・設定 API**: トラックの生成位置が選択状態に依存する一方、SDK から選択トラックを読むことも設定することもできないため、生成位置を制御も予測もできない。
 - **トラック移動（並べ替え）API**: 生成後に意図した位置へ移動する代替も、トラックの並べ替え API が無いため取れない。
+- **無効化された Handle の安全な扱い**: SDK の Handle キャッシュは、Live 側で対象を失った Handle を参照したときに非同期コールバックの内側から `TypeError: Invalid object reference` を投げる。呼び出し側で捕まえる手段がなく、`uncaughtException` の封じ込めでしかプロセスを守れない（#151）。無効な Handle を照会できる API、または解決失敗を戻り値で返す API が必要。
 - **非同期コールバックを受け付けるトランザクション API**: `withinTransaction` のコールバックは同期に限られるため、生成と生成後の属性設定を 1 undo ステップへ束ねられない。上の「トランザクションと undo ステップ」を参照。
 
 ## Hybrid Runtime

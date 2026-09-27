@@ -9,7 +9,7 @@ authors:
   - family-names: Ouchi
     given-names: Arata
     affiliation: Philtz
-version: 3.2.1
+version: 3.2.2
 license: MIT
 repository-code: "https://github.com/philtzjp/live-connector"
 url: "https://www.philtz.com"
