@@ -44,23 +44,33 @@ NG  Cypher bug
 NG  [Request] About device insertion
 ```
 
-Write the body in four sections. The [issue template](.github/ISSUE_TEMPLATE.md) starts you off in this shape.
+Open an issue from [New issue](https://github.com/philtzjp/live-connector/issues/new/choose) and pick a form. Blank issues are disabled. Questions, proposals and anything not yet shaped into an issue go to [Discussions](https://github.com/philtzjp/live-connector/discussions).
+
+| Form | Use it for |
+| --- | --- |
+| Task | Implementation, improvement, refactoring, fix or documentation work |
+| Bug report | Something that fails, crashes or returns an unexpected result |
+
+The [task form](.github/ISSUE_TEMPLATE/task.yml) asks for four sections. Background, scope and acceptance criteria are required; notes may be left empty.
 
 | Section | Contents |
 | --- | --- |
 | Background | Why it is needed, in one to three sentences |
 | Scope | A bullet list of what to do |
 | Acceptance criteria | Conditions that decide when it is done, as `- [ ]` checkboxes |
-| Notes | Reference links or caveats. Omit if there are none |
+| Notes | Reference links or caveats. Leave empty if there are none |
 
 Avoid opinions such as "I think" or "this seems reasonable"; write verifiable facts, specifications and constraints. Split an issue if it grows too large.
 
-For bug reports, include the following so we can reproduce the problem:
+The [bug report form](.github/ISSUE_TEMPLATE/bug_report.yml) asks for the same background, and additionally requires the following so we can reproduce the problem. Acceptance criteria are optional there, because you may not know yet what would count as fixed.
 
 - Ableton Live version and build
 - live-connector version, as shown by `curl http://127.0.0.1:7799/health`
 - OS and MCP client
-- The Cypher query or tool call, what you expected, and what happened
+- Steps to reproduce, as the Cypher statement or tool call you ran
+- What you expected, and what happened
+
+Neither form can check the title, so write it in the `type(scope): description` format yourself.
 
 </details>
 
@@ -261,23 +271,33 @@ NG  Cypher のバグ
 NG  【要望】デバイス挿入について
 ```
 
-本文は次の 4 つの節で書きます。[Issue テンプレート](.github/ISSUE_TEMPLATE.md) を使うと、この形で始まります。
+Issue は [New issue](https://github.com/philtzjp/live-connector/issues/new/choose) からフォームを選んで作ります。空の Issue は作れません。使い方の質問、提案の相談、まだ Issue にする形が決まっていない話は [Discussions](https://github.com/philtzjp/live-connector/discussions) へ投稿してください。
+
+| フォーム | 使う場面 |
+| --- | --- |
+| タスク | 実装、改善、リファクタリング、修正、ドキュメントの作業 |
+| バグ報告 | 動かない、落ちる、期待と違う結果が返る問題 |
+
+[タスクのフォーム](.github/ISSUE_TEMPLATE/task.yml) は次の 4 つの節を尋ねます。背景、作業範囲、受け入れ条件は必須です。備考は空のままで構いません。
 
 | 節 | 書くこと |
 | --- | --- |
 | 背景 | なぜ必要か。1〜3 文で書きます |
 | 作業範囲 | やることの箇条書き |
 | 受け入れ条件 | 完了を判断できる条件。`- [ ]` のチェックボックスで書きます |
-| 備考 | 参考リンクや注意点。なければ省略します |
+| 備考 | 参考リンクや注意点。なければ空のままで構いません |
 
 「〜と思う」「〜が妥当」のような主観的な書き方はせず、確かめられる事実、仕様、制約で書いてください。1 つの Issue が大きくなりすぎる場合は分けてください。
 
-バグ報告には、再現できるように次の情報を含めてください。
+[バグ報告のフォーム](.github/ISSUE_TEMPLATE/bug_report.yml) は同じ背景に加えて、再現できるように次の情報を必須で尋ねます。受け入れ条件は、何をもって直ったと判断するかが分からない場合もあるため任意です。
 
 - Ableton Live のバージョンとビルド
 - live-connector のバージョン。`curl http://127.0.0.1:7799/health` で確認できます
 - OS と MCP クライアント
-- 実行した Cypher かツール呼び出し、期待した結果、実際の結果
+- 再現手順。実行した Cypher 文かツール呼び出しをそのまま貼ってください
+- 期待した結果と、実際の結果
+
+どちらのフォームもタイトルの形式は検査できないため、`type(scope): 説明` の形式は自分で守ってください。
 
 </details>
 

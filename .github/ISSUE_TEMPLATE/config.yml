@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+    - name: 質問・相談・アイデア / Questions, ideas and discussion
+      url: https://github.com/philtzjp/live-connector/discussions
+      about: 使い方の質問、提案の相談、まだ Issue にする形が決まっていない話は Discussions へ投稿してください。 / Ask how to use it, float a proposal, or raise anything not yet shaped into an issue.

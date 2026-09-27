@@ -1,0 +1,90 @@
+name: バグ報告 / Bug report
+description: 動かない、落ちる、期待と違う結果が返る問題を報告する / Report something that fails, crashes or returns an unexpected result
+title: "fix(scope): "
+body:
+    - type: markdown
+      attributes:
+          value: |
+              タイトルは `fix(scope): 説明` の形式にしてください。`scope` は問題が起きた場所で決めます（`apps/extension` なら `extension`、`packages/cypher` なら `cypher`、どこか分からない場合は `extension`）。
+
+              Write the title as `fix(scope): description`. `scope` comes from where the problem occurs: `extension` for `apps/extension`, the package name such as `cypher` for anything under `packages/`, or `extension` if you are not sure.
+    - type: textarea
+      id: background
+      attributes:
+          label: 背景 / Background
+          description: 何が起きたか。影響と、いつから起きているかが分かれば添えてください。 / What happened. Add the impact and when it started if you know.
+          placeholder: |
+              `do` で書き込みを続けている途中に MCP が応答しなくなり、`127.0.0.1:7799` も閉じる。
+      validations:
+          required: true
+    - type: input
+      id: live_version
+      attributes:
+          label: Ableton Live のバージョンとビルド / Ableton Live version and build
+          description: Live の Help → About で確認できます。 / Shown in Live under Help → About.
+          placeholder: Live 12.4.15b3 (Beta)
+      validations:
+          required: true
+    - type: input
+      id: connector_version
+      attributes:
+          label: live-connector のバージョン / live-connector version
+          description: '`curl http://127.0.0.1:7799/health` の `version` で確認できます。 / Shown as `version` in `curl http://127.0.0.1:7799/health`.'
+          placeholder: 3.2.2
+      validations:
+          required: true
+    - type: input
+      id: environment
+      attributes:
+          label: OS と MCP クライアント / OS and MCP client
+          placeholder: macOS 15.6 (Apple Silicon) / Claude Code
+      validations:
+          required: true
+    - type: textarea
+      id: reproduction
+      attributes:
+          label: 再現手順 / Steps to reproduce
+          description: 実行した Cypher 文かツール呼び出しを、そのまま貼ってください。 / Paste the Cypher statement or tool call you ran, as it was.
+          placeholder: |
+              1. `CREATE (t:MidiTrack {name:"Bass"})` を実行する
+              2. `MATCH (t:MidiTrack {name:"Bass"}) CREATE (t)-[:HAS_DEVICE]->(d:Device {name:"Wavetable"})` を実行する
+      validations:
+          required: true
+    - type: textarea
+      id: expected
+      attributes:
+          label: 期待した結果 / Expected result
+          placeholder: Wavetable がトラックのデバイスチェーンへ挿入される。
+      validations:
+          required: true
+    - type: textarea
+      id: actual
+      attributes:
+          label: 実際の結果 / Actual result
+          description: 返ってきた応答をそのまま貼ってください。 / Paste the response you got, as it was.
+          placeholder: |
+              {"error":"application_error","detail":"failed to insert device \"Wavetable\""}
+      validations:
+          required: true
+    - type: textarea
+      id: logs
+      attributes:
+          label: ログ / Logs
+          description: '`ExtensionHost.txt` や MCP クライアントのログがあれば貼ってください。 / Paste `ExtensionHost.txt` or your MCP client log if you have it.'
+          render: text
+      validations:
+          required: false
+    - type: textarea
+      id: acceptance
+      attributes:
+          label: 受け入れ条件 / Acceptance criteria
+          description: 直ったと判断できる条件が分かる場合は `- [ ]` のチェックボックスで書いてください。分からない場合は空のままで構いません。 / If you know what would count as fixed, write it as `- [ ]` checkboxes. Leave empty if you are not sure.
+      validations:
+          required: false
+    - type: textarea
+      id: notes
+      attributes:
+          label: 備考 / Notes
+          description: 関連する Issue や PR、試した回避策。なければ空のままで構いません。 / Related issues or pull requests, and any workaround you tried. Leave empty if there are none.
+      validations:
+          required: false
