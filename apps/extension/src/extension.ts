@@ -2,6 +2,7 @@ import { type ActivationContext, initialize } from "@ableton-extensions/sdk"
 import { loadEnv } from "@live-connector/env"
 import { createLogger } from "@live-connector/log"
 import { API_VERSION } from "./deps"
+import { installCrashGuard } from "./runtime/crash-guard"
 import { HybridRuntime } from "./runtime/runtime"
 import { startMcpHttpServer } from "./server/http"
 
@@ -13,6 +14,9 @@ const runtime_log = createLogger("runtime")
  * SDK を初期化し、activation 単位の Hybrid Runtime と常駐 MCP サーバーを起動する。
  */
 export function activate(activation: ActivationContext): void {
+    // SDK が無効な Handle を参照して投げる例外で Extension Host ごと落ちるのを防ぐ（#151）。
+    installCrashGuard(log)
+
     const context = initialize(activation, API_VERSION)
     const env = loadEnv()
     const runtime = new HybridRuntime(env, runtime_log)

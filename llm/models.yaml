@@ -18,6 +18,7 @@ source_files:
         - "apps/extension/src/server/mcp.ts"
         - "apps/extension/src/server/annotations.ts"
         - "apps/extension/src/runtime/runtime.ts"
+        - "apps/extension/src/runtime/crash-guard.ts"
         - "apps/extension/src/runtime/capabilities.ts"
         - "apps/extension/src/runtime/locks.ts"
         - "apps/extension/src/runtime/resolver.ts"
@@ -434,6 +435,13 @@ models:
           - name: "metadata"
             type: "McpErrorMetadata"
             required: false
+
+    - name: "installCrashGuard"
+      kind: "function"
+      source: "apps/extension/src/runtime/crash-guard.ts"
+      owner_package: "@live-connector/extension"
+      signature: "(log: Logger) => { uninstall: () => void }"
+      note: "uncaughtException / unhandledRejection を記録して Extension Host の終了を防ぐ。二重登録しない"
 
     - name: "bigintToJsonValue"
       kind: "function"
