@@ -4,6 +4,13 @@
 # 設計ドキュメント（ローカル限定・非公開）
 /MCP-DESIGN.md
 
+# エージェント向けの内部ドキュメントとスキル（ローカル限定・非公開）
+/AGENTS.md
+/CLAUDE.md
+/llm/
+/.agents/skills/
+/.claude/skills/
+
 # Claude Code MCP 登録（Bearer トークンを含むためローカル限定）
 /.mcp.json
 

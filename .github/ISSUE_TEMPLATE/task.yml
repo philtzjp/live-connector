@@ -5,7 +5,7 @@ body:
     - type: markdown
       attributes:
           value: |
-              タイトルは `type(scope): 説明` の形式にしてください。`type` は `feat` / `fix` / `perf` / `refactor` / `docs` / `style` / `test` / `chore` / `ci` / `build` のいずれかです。`scope` は変更する場所で決めます（`apps/extension` なら `extension`、`packages/cypher` なら `cypher`、`llm/` や `.github/` などトップレベルディレクトリならそのディレクトリ名、リポジトリ全体なら `repo`）。説明は日本語の短い文で、動作で終えてください。
+              タイトルは `type(scope): 説明` の形式にしてください。`type` は `feat` / `fix` / `perf` / `refactor` / `docs` / `style` / `test` / `chore` / `ci` / `build` のいずれかです。`scope` は変更する場所で決めます（`apps/extension` なら `extension`、`packages/cypher` なら `cypher`、`docs/` や `.github/` などトップレベルディレクトリならそのディレクトリ名、リポジトリ全体なら `repo`）。説明は日本語の短い文で、動作で終えてください。
 
               Write the title as `type(scope): description`. `type` is one of `feat`, `fix`, `perf`, `refactor`, `docs`, `style`, `test`, `chore`, `ci` or `build`. `scope` comes from the place you change: `extension` for `apps/extension`, the package name such as `cypher` for anything under `packages/`, the directory name such as `llm` or `.github` for a top-level directory, and `repo` for the whole repository.
 

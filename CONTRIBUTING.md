@@ -122,7 +122,7 @@ NG  update code ✨
 | --- | --- |
 | `apps/extension` | `extension` |
 | Anything under `packages/`, such as `packages/cypher` | The package name, such as `cypher` |
-| A top-level directory such as `llm/`, `.github/` or `.agents/` | The directory name, such as `llm`, `.github` or `.agents` |
+| A top-level directory such as `docs/` or `.github/` | The directory name, such as `docs` or `.github` |
 | The whole repository | `repo` |
 
 End the description with an action, such as 〜する, 〜を追加 or 〜を修正, not with a bare noun. Do not include parentheses, emoji, the words フェーズ or Phase, signatures such as `Co-Authored-By`, or tool session URLs.
@@ -189,23 +189,6 @@ A pnpm and Turborepo monorepo. Deployable apps live in `apps/`, shared libraries
 | `packages/env` | zod schema for environment variables |
 | `packages/error`, `packages/log`, `packages/json` | Shared errors, logging, and `bigint`-safe JSON serialization |
 | `packages/tsconfig` | Shared TypeScript configuration |
-| `llm/` | Design documents and the data model |
-
-</details>
-
-<details>
-<summary>Design documents</summary>
-<br>
-
-Read the relevant documents before changing how things fit together. They are written in Japanese.
-
-| Document | Contents |
-| --- | --- |
-| [llm/ARCHITECTURE.md](llm/ARCHITECTURE.md) | Structure, responsibility boundaries, runtime flow |
-| [llm/models.yaml](llm/models.yaml) | Source of truth for the data model |
-| [llm/device-catalog.md](llm/device-catalog.md) | Built-in device catalog and how it matches real Live installs |
-| [llm/midi-audition.md](llm/midi-audition.md) | Turning a MIDI track into audio for listening |
-| [llm/version/](llm/version) | Per-version change notes |
 
 </details>
 
@@ -213,14 +196,13 @@ Read the relevant documents before changing how things fit together. They are wr
 <summary>Code conventions</summary>
 <br>
 
-The full rules are in [AGENTS.md](AGENTS.md). The most important ones:
+The rules that matter most:
 
 - Variables use `snake_case`, functions `camelCase`, types `PascalCase`, and environment variables `CONSTANT_CASE`. Indent with four spaces.
 - Prefer descriptive names, even when they get long.
 - Use `packages/log` for logging, `packages/error` for errors, `packages/env` for environment variables, and `packages/json` for JSON serialization. Do not reimplement them in other packages.
 - When an environment variable or an external API response is missing, raise an error instead of falling back to a default.
 - Add dependencies with `pnpm add`, not by editing `package.json` directly.
-- Update `llm/models.yaml` when the data model changes, and `llm/ARCHITECTURE.md` when the structure changes.
 
 </details>
 
@@ -228,9 +210,11 @@ The full rules are in [AGENTS.md](AGENTS.md). The most important ones:
 <summary>Working with an agent</summary>
 <br>
 
-Coding agents read [AGENTS.md](AGENTS.md) and [`.agents/skills/`](.agents/skills). The conventions in this guide are a human-oriented summary of them.
+Coding agents follow their own instruction files, which are not kept in this repository. This guide is the written form of those conventions, so follow it.
 
-When an agent writes an issue or a pull request, put a signature such as `✳︎ Anthropic Claude Opus 4.8` on the first line, followed by one blank line and then the body. For commits written entirely by an agent, set `--author` to the agent.
+When an agent writes an issue or a pull request, put a signature on the first line, followed by one blank line and then the body. The signature is `✳︎ <vendor> <model> <version>`, as in `✳︎ Anthropic Claude Opus 5` or `✳︎ OpenAI GPT-5.2-Codex`. Omit the version when the model name already carries one. Put the signature on the first line only, never in the middle or at the end, and do not add dates, IDs or decoration to that line.
+
+For commits written entirely by an agent, set `--author` to the agent.
 
 ```sh
 git commit --author="Claude <noreply@anthropic.com>" -m "fix(cypher): 空文字列リテラルのパースエラーを修正する"
@@ -349,7 +333,7 @@ NG  update code ✨
 | --- | --- |
 | `apps/extension` | `extension` |
 | `packages/cypher` など `packages/` 配下 | `cypher` のようにパッケージ名 |
-| `llm/`、`.github/`、`.agents/` などリポジトリ直下のディレクトリ | `llm`、`.github`、`.agents` のようにディレクトリ名 |
+| `docs/`、`.github/` などリポジトリ直下のディレクトリ | `docs`、`.github` のようにディレクトリ名 |
 | リポジトリ全体 | `repo` |
 
 説明は動作で終え、「〜する」「〜を追加」「〜を修正」のように書きます。名詞だけで終えません。カッコ、emoji、「フェーズ」「Phase」、`Co-Authored-By` などの署名、ツールのセッション URL は含めません。
@@ -416,23 +400,6 @@ pnpm と Turborepo のモノレポです。`apps/` にはデプロイするア�
 | `packages/env` | 環境変数の zod スキーマ |
 | `packages/error`, `packages/log`, `packages/json` | エラー、ログ、`bigint` を扱える JSON 直列化の共通実装 |
 | `packages/tsconfig` | 共有の TypeScript 設定 |
-| `llm/` | 設計文書とデータモデル |
-
-</details>
-
-<details>
-<summary>設計文書</summary>
-<br>
-
-構成を変える前に、関係する文書を読んでください。
-
-| 文書 | 内容 |
-| --- | --- |
-| [llm/ARCHITECTURE.md](llm/ARCHITECTURE.md) | 構成、責務の境界、実行時の流れ |
-| [llm/models.yaml](llm/models.yaml) | データモデルの正本 |
-| [llm/device-catalog.md](llm/device-catalog.md) | 内蔵デバイスカタログと実機との整合 |
-| [llm/midi-audition.md](llm/midi-audition.md) | MIDI トラックを audio にして試聴する手順 |
-| [llm/version/](llm/version) | バージョンごとの変更記録 |
 
 </details>
 
@@ -440,14 +407,13 @@ pnpm と Turborepo のモノレポです。`apps/` にはデプロイするア�
 <summary>コード規約</summary>
 <br>
 
-詳しくは [AGENTS.md](AGENTS.md) にあります。特に守ってほしいのは次の点です。
+特に守ってほしいのは次の点です。
 
 - 変数は `snake_case`、関数は `camelCase`、型は `PascalCase`、環境変数は `CONSTANT_CASE` で書きます。インデントは 4 スペースです。
 - 名前は、長くなっても意味がわかるものにします。
 - ログは `packages/log`、エラーは `packages/error`、環境変数は `packages/env`、JSON 直列化は `packages/json` を使います。各パッケージで独自に実装しないでください。
 - 環境変数や外部 API のレスポンスが欠けているとき、既定値で補わずにエラーにします。
 - パッケージは `package.json` を直接編集せず、`pnpm add` で追加します。
-- データモデルを変えたら `llm/models.yaml` を、構成を変えたら `llm/ARCHITECTURE.md` を更新します。
 
 </details>
 
@@ -455,9 +421,11 @@ pnpm と Turborepo のモノレポです。`apps/` にはデプロイするア�
 <summary>エージェントで作業する場合</summary>
 <br>
 
-コーディングエージェントは [AGENTS.md](AGENTS.md) と [`.agents/skills/`](.agents/skills) を読んで作業します。この文書の規約も、そこから人向けにまとめ直したものです。
+コーディングエージェントは、このリポジトリには置いていない指示ファイルを読んで作業します。この文書は、その規約を文章にしたものです。
 
-エージェントが Issue や PR を書いた場合は、本文の先頭行に `✳︎ Anthropic Claude Opus 4.8` のような署名を入れ、空行を 1 行挟んで本文を続けます。エージェントだけで書いたコミットは、`--author` でエージェントの種類を明示します。
+エージェントが Issue や PR を書いた場合は、本文の先頭行に署名を入れ、空行を 1 行挟んで本文を続けます。署名は `✳︎ <会社名> <モデル名> <バージョン>` の形式で、`✳︎ Anthropic Claude Opus 5` や `✳︎ OpenAI GPT-5.2-Codex` のように書きます。モデル名にバージョンが含まれる場合は、バージョンを省略します。署名は先頭行だけに置き、途中や末尾には書きません。日時、ID、装飾もその行に入れません。
+
+エージェントだけで書いたコミットは、`--author` でエージェントの種類を明示します。
 
 ```sh
 git commit --author="Claude <noreply@anthropic.com>" -m "fix(cypher): 空文字列リテラルのパースエラーを修正する"
