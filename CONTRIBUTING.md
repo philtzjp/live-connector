@@ -1,7 +1,7 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/philtz-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/philtz.png">
-  <img src="docs/assets/philtz-outline.png" width="96" alt="Philtz">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/philtzjp/.github/main/images/philtz-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/philtzjp/.github/main/images/philtz-light.png">
+  <img src="https://raw.githubusercontent.com/philtzjp/.github/main/images/philtz-outline.png" width="96" alt="Philtz">
 </picture>
 
 # Contributing to live-connector
