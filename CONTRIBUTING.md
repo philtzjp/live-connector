@@ -46,7 +46,7 @@ NG  [Request] About device insertion
 
 Open an issue from [New issue](https://github.com/philtzjp/live-connector/issues/new/choose). There is one template. Blank issues are disabled, and questions, proposals and anything not yet shaped into an issue go to [Discussions](https://github.com/philtzjp/live-connector/discussions).
 
-The [template](.github/ISSUE_TEMPLATE/issue.md) opens with a signature line and the four sections below. Keep the headings exactly as they are: they are in Japanese because the convention checker matches them character for character.
+The [template](https://github.com/philtzjp/.github/blob/main/.github/ISSUE_TEMPLATE/task.md) opens with a signature line and the four sections below. Keep the headings exactly as they are: they are in Japanese because the convention checker matches them character for character.
 
 | Section | Contents |
 | --- | --- |
@@ -130,7 +130,7 @@ Split commits by package or feature. Do not mix unrelated changes in one commit,
 <br>
 
 - Use the same `type(scope): description` format for the title as for commit messages.
-- Follow the [pull request template](.github/PULL_REQUEST_TEMPLATE.md) and write the background, scope, acceptance criteria and notes.
+- Follow the [pull request template](https://github.com/philtzjp/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md) and write the background, scope, acceptance criteria and notes.
 - Reference the issue in the background as `#128`. Do not use auto-close keywords such as `Closes #128`; a maintainer closes the issue after merging.
 - For each acceptance criterion, describe how it was met and which command verified it.
 - Describe the impact and any remaining risks.
@@ -251,7 +251,7 @@ NG  【要望】デバイス挿入について
 
 Issue は [New issue](https://github.com/philtzjp/live-connector/issues/new/choose) から作ります。テンプレートは 1 つです。空の Issue は作れません。使い方の質問、提案の相談、まだ Issue にする形が決まっていない話は [Discussions](https://github.com/philtzjp/live-connector/discussions) へ投稿してください。
 
-[テンプレート](.github/ISSUE_TEMPLATE/issue.md) には、署名の行と次の 4 つの節が入っています。見出しはそのまま使ってください。規約の検査が見出しを一字一句で照合します。
+[テンプレート](https://github.com/philtzjp/.github/blob/main/.github/ISSUE_TEMPLATE/task.md) には、署名の行と次の 4 つの節が入っています。見出しはそのまま使ってください。規約の検査が見出しを一字一句で照合します。
 
 | 節 | 書くこと |
 | --- | --- |
@@ -335,7 +335,7 @@ NG  update code ✨
 <br>
 
 - タイトルはコミットメッセージと同じ `type(scope): 説明` の形式にします。
-- 本文は [PR テンプレート](.github/PULL_REQUEST_TEMPLATE.md) に従い、背景、作業範囲、受け入れ条件、備考を書きます。
+- 本文は [PR テンプレート](https://github.com/philtzjp/.github/blob/main/.github/PULL_REQUEST_TEMPLATE.md) に従い、背景、作業範囲、受け入れ条件、備考を書きます。
 - 背景で対象の Issue を `#128` のように参照します。`Closes #128` のような英語の自動クローズ記法は使いません。Issue はマージ後にメンテナーがクローズします。
 - 受け入れ条件には、各条件をどう満たしたか、どのコマンドで検証したかを添えます。
 - 影響範囲と、残っているリスクを書きます。
