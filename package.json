@@ -9,6 +9,8 @@
         "node": ">=24.16.0"
     },
     "scripts": {
+        "skills": "DISABLE_TELEMETRY=1 pnpm dlx skills add philtzjp/skills -a claude-code -a codex -a cursor -s github -s japanese -s turborepo -s conventions -y",
+        "postinstall": "[ -n \"$CI\" ] || [ ! -e .git ] || pnpm run skills || true",
         "build": "turbo run build",
         "package": "turbo run package",
         "typecheck": "turbo run typecheck",
